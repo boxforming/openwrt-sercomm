@@ -1,0 +1,3869 @@
+From 7e299b4b9372b06cf3989266687a82d16b21f0bf Mon Sep 17 00:00:00 2001
+From: Mikhail Zhilkin <csharper2005@gmail.com>
+Date: Thu, 30 Dec 2021 07:31:16 +0000
+Subject: [PATCH] ramips: crypto: Add Mediatek EIP93 crypto engine support for
+ mt7621
+
+Add Mediatek EIP93 crypto engine support for mt7621
+
+Patch taken from:
+https://github.com/coolsnowwolf/lede/tree/master/package/lean/mtk-eip93
+
+Signed-off-by: Mikhail Zhilkin <csharper2005@gmail.com>
+---
+ package/custom/mtk-eip93/Makefile             |   51 +
+ .../patches/0001-Fix-compilation-issues.patch |   37 +
+ package/custom/mtk-eip93/src/Makefile         |    3 +
+ package/custom/mtk-eip93/src/eip93-cipher.c   | 2031 +++++++++++++++++
+ package/custom/mtk-eip93/src/eip93-cipher.h   |   89 +
+ package/custom/mtk-eip93/src/eip93-common.h   |  202 ++
+ package/custom/mtk-eip93/src/eip93-core.c     |  566 +++++
+ package/custom/mtk-eip93/src/eip93-core.h     |   91 +
+ package/custom/mtk-eip93/src/eip93-prng.c     |  360 +++
+ package/custom/mtk-eip93/src/eip93-prng.h     |   34 +
+ package/custom/mtk-eip93/src/eip93-regs.h     |  190 ++
+ package/custom/mtk-eip93/src/eip93-ring.c     |   82 +
+ package/custom/mtk-eip93/src/eip93-ring.h     |   11 +
+ 13 files changed, 3747 insertions(+)
+ create mode 100644 package/custom/mtk-eip93/Makefile
+ create mode 100644 package/custom/mtk-eip93/patches/0001-Fix-compilation-issues.patch
+ create mode 100644 package/custom/mtk-eip93/src/Makefile
+ create mode 100644 package/custom/mtk-eip93/src/eip93-cipher.c
+ create mode 100644 package/custom/mtk-eip93/src/eip93-cipher.h
+ create mode 100644 package/custom/mtk-eip93/src/eip93-common.h
+ create mode 100644 package/custom/mtk-eip93/src/eip93-core.c
+ create mode 100644 package/custom/mtk-eip93/src/eip93-core.h
+ create mode 100644 package/custom/mtk-eip93/src/eip93-prng.c
+ create mode 100644 package/custom/mtk-eip93/src/eip93-prng.h
+ create mode 100644 package/custom/mtk-eip93/src/eip93-regs.h
+ create mode 100644 package/custom/mtk-eip93/src/eip93-ring.c
+ create mode 100644 package/custom/mtk-eip93/src/eip93-ring.h
+
+diff --git a/package/custom/mtk-eip93/Makefile b/package/custom/mtk-eip93/Makefile
+new file mode 100644
+index 0000000000..43ae997c55
+--- /dev/null
++++ b/package/custom/mtk-eip93/Makefile
+@@ -0,0 +1,51 @@
++#
++# Copyright (C) 2006-2019 OpenWrt.org
++#
++# This is free software, licensed under the GNU General Public License v2.
++# See /LICENSE for more information.
++#
++
++
++include $(TOPDIR)/rules.mk
++include $(INCLUDE_DIR)/kernel.mk
++
++PKG_NAME:=mtk-eip93
++PKG_RELEASE:=1.3
++
++include $(INCLUDE_DIR)/package.mk
++
++define KernelPackage/crypto-hw-eip93
++  SECTION:=kernel
++  CATEGORY:=Kernel modules
++  SUBMENU:=Cryptographic API modules
++  DEPENDS:= \
++	@TARGET_ramips_mt7621 \
++	+kmod-crypto-authenc \
++	+kmod-crypto-des \
++	+kmod-crypto-md5 \
++	+kmod-crypto-sha1 \
++	+kmod-crypto-sha256
++  KCONFIG:=
++  TITLE:=MTK EIP93 crypto module.
++  FILES:=$(PKG_BUILD_DIR)/crypto-hw-eip93.ko
++  AUTOLOAD:=$(call AutoProbe,crypto-hw-eip93)
++endef
++
++define KernelPackage/crypto-hw-eip93/description
++Kernel module to enable EIP-93 Crypto engine as found 
++in the Mediatek MT7621 SoC.
++It enables DES/3DES/AES ECB/CBC/CTR and
++IPSEC offload with authenc(hmac(sha1/sha256), aes/cbc/rfc3686)
++endef
++
++MAKE_OPTS:= \
++	$(KERNEL_MAKE_FLAGS) \
++	M="$(PKG_BUILD_DIR)"
++
++define Build/Compile
++	$(MAKE) -C "$(LINUX_DIR)" \
++		$(MAKE_OPTS) \
++		modules
++endef
++
++$(eval $(call KernelPackage,crypto-hw-eip93))
+diff --git a/package/custom/mtk-eip93/patches/0001-Fix-compilation-issues.patch b/package/custom/mtk-eip93/patches/0001-Fix-compilation-issues.patch
+new file mode 100644
+index 0000000000..f09ad61bdf
+--- /dev/null
++++ b/package/custom/mtk-eip93/patches/0001-Fix-compilation-issues.patch
+@@ -0,0 +1,37 @@
++From d789256e237343f17097eed7ef29be554b5a2265 Mon Sep 17 00:00:00 2001
++From: ailick <277498654@qq.com>
++Date: Sat, 31 Jul 2021 00:49:23 +0800
++Subject: [PATCH] Fix compilation issues
++
++---
++ eip93-prng.c | 1 +
++ eip93-ring.c | 1 +
++ 2 files changed, 2 insertions(+)
++
++diff --git a/eip93-prng.c b/eip93-prng.c
++index 9c02522..87cd4dc 100644
++--- a/eip93-prng.c
+++++ b/eip93-prng.c
++@@ -5,6 +5,7 @@
++  * Richard van Schagen <vschagen@cs.com>
++  */
++ 
+++#include <linux/dma-mapping.h>
++ #include "eip93-common.h"
++ #include "eip93-core.h"
++ #include "eip93-regs.h"
++diff --git a/eip93-ring.c b/eip93-ring.c
++index fff5c0b..b553bba 100644
++--- a/eip93-ring.c
+++++ b/eip93-ring.c
++@@ -5,6 +5,7 @@
++  * Richard van Schagen <vschagen@cs.com>
++  */
++ 
+++#include <linux/device.h>
++ #include "eip93-common.h"
++ #include "eip93-core.h"
++ 
++-- 
++2.30.2
++
+diff --git a/package/custom/mtk-eip93/src/Makefile b/package/custom/mtk-eip93/src/Makefile
+new file mode 100644
+index 0000000000..ad9fe6b3b7
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/Makefile
+@@ -0,0 +1,3 @@
++crypto-hw-eip93-objs:= eip93-core.o eip93-ring.o eip93-cipher.o eip93-prng.o
++
++obj-m += crypto-hw-eip93.o
+diff --git a/package/custom/mtk-eip93/src/eip93-cipher.c b/package/custom/mtk-eip93/src/eip93-cipher.c
+new file mode 100644
+index 0000000000..c99cb05d0f
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-cipher.c
+@@ -0,0 +1,2031 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++#define DEBUG 1
++#include <crypto/aead.h>
++#include <crypto/aes.h>
++#include <crypto/authenc.h>
++#include <crypto/ctr.h>
++#include <crypto/hmac.h>
++#include <crypto/internal/aead.h>
++#include <crypto/internal/des.h>
++#include <crypto/internal/skcipher.h>
++#include <crypto/md5.h>
++#include <crypto/null.h>
++#include <crypto/scatterwalk.h>
++#include <crypto/sha.h>
++
++#include <linux/dma-mapping.h>
++#include <linux/dmapool.h>
++#include <linux/moduleparam.h>
++#include <linux/scatterlist.h>
++#include <linux/types.h>
++
++#include "eip93-common.h"
++#include "eip93-core.h"
++#include "eip93-cipher.h"
++#include "eip93-regs.h"
++#include "eip93-ring.h"
++
++static unsigned int aes_sw = NUM_AES_BYPASS;
++module_param(aes_sw, uint, 0644);
++MODULE_PARM_DESC(aes_sw,
++		 "Only use hardware for AES requests larger than this "
++		 "[0=always use hardware; default="
++		 __stringify(NUM_AES_BYPASS)"]");
++
++inline void mtk_free_sg_cpy(const int len, struct scatterlist **sg)
++{
++	if (!*sg || !len)
++		return;
++
++	free_pages((unsigned long)sg_virt(*sg), get_order(len));
++	kfree(*sg);
++	*sg = NULL;
++}
++
++inline int mtk_make_sg_cpy(struct mtk_device *mtk, struct scatterlist *src,
++		struct scatterlist **dst, const int len,
++		struct mtk_cipher_reqctx *rctx, const bool copy)
++{
++	void *pages;
++	int totallen;
++
++	*dst = kmalloc(sizeof(**dst), GFP_KERNEL);
++	if (!*dst) {
++		printk("NO MEM\n");
++		return -ENOMEM;
++	}
++	/* allocate enough memory for full scatterlist */
++	totallen = rctx->assoclen + rctx->textsize + rctx->authsize;
++
++	pages = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA,
++					get_order(totallen));
++
++	if (!pages) {
++		kfree(*dst);
++		*dst = NULL;
++		printk("no free pages\n");
++		return -ENOMEM;
++	}
++
++	sg_init_table(*dst, 1);
++	sg_set_buf(*dst, pages, totallen);
++
++	/* copy only as requested */
++	if (copy)
++		sg_copy_to_buffer(src, sg_nents(src), pages, len);
++
++	return 0;
++}
++
++inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len, const int blksz)
++{
++	int nents;
++
++	for (nents = 0; sg; sg = sg_next(sg), ++nents) {
++		/* When destination buffers are not aligned to the cache line
++		 * size we need bounce buffers. The DMA-API requires that the
++		 * entire line is owned by the DMA buffer.
++		 */
++		if (!IS_ALIGNED(sg->offset, 4))
++			return false;
++
++		/* segments need to be blocksize aligned */
++		if (len <= sg->length) {
++			if (!IS_ALIGNED(len, blksz))
++				return false;
++
++			return true;
++		}
++
++		if (!IS_ALIGNED(sg->length, blksz))
++			return false;
++
++		len -= sg->length;
++	}
++	return false;
++}
++
++void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
++				const u32 nonce, const unsigned int keylen,
++				const unsigned long flags)
++{
++	struct saRecord_s *saRecord;
++
++	saRecord = ctx->sa;
++
++	saRecord->saCmd0.bits.ivSource = 2;
++	saRecord->saCmd0.bits.saveIv = 1;
++	saRecord->saCmd0.bits.opGroup = 0;
++	saRecord->saCmd0.bits.opCode = 0;
++
++	saRecord->saCmd0.bits.cipher = 15;
++	switch ((flags & MTK_ALG_MASK)) {
++	case MTK_ALG_AES:
++		saRecord->saCmd0.bits.cipher = 3;
++		saRecord->saCmd1.bits.aesKeyLen = (keylen / 8);
++		break;
++	case MTK_ALG_3DES:
++		saRecord->saCmd0.bits.cipher = 1;
++		break;
++	case MTK_ALG_DES:
++		saRecord->saCmd0.bits.cipher = 0;
++		break;
++	}
++
++	saRecord->saCmd0.bits.hash = 15;
++	switch ((flags & MTK_HASH_MASK)) {
++	case MTK_HASH_SHA256:
++		saRecord->saCmd0.bits.hash = 3;
++		break;
++	case MTK_HASH_SHA224:
++		saRecord->saCmd0.bits.hash = 2;
++		break;
++	case MTK_HASH_SHA1:
++		saRecord->saCmd0.bits.hash = 1;
++		break;
++	case MTK_HASH_MD5:
++		saRecord->saCmd0.bits.hash = 0;
++		break;
++	}
++
++	saRecord->saCmd0.bits.hdrProc = 0;
++	saRecord->saCmd0.bits.padType = 3;
++	saRecord->saCmd0.bits.extPad = 0;
++	saRecord->saCmd0.bits.scPad = 0;
++
++	switch ((flags & MTK_MODE_MASK)) {
++	case MTK_MODE_CBC:
++		saRecord->saCmd1.bits.cipherMode = 1;
++		break;
++	case MTK_MODE_CTR:
++		saRecord->saCmd1.bits.cipherMode = 2;
++		break;
++	case MTK_MODE_ECB:
++		saRecord->saCmd1.bits.cipherMode = 0;
++		break;
++	}
++
++	saRecord->saCmd1.bits.byteOffset = 0;
++	saRecord->saCmd1.bits.hashCryptOffset = 0;
++	saRecord->saCmd0.bits.digestLength = 0;
++	saRecord->saCmd1.bits.copyPayload = 0;
++
++	if (IS_HMAC(flags)) {
++		saRecord->saCmd1.bits.hmac = 1;
++		saRecord->saCmd1.bits.copyDigest = 1;
++		saRecord->saCmd1.bits.copyHeader = 1;
++	} else {
++		saRecord->saCmd1.bits.hmac = 0;
++		saRecord->saCmd1.bits.copyDigest = 0;
++		saRecord->saCmd1.bits.copyHeader = 0;
++	}
++
++	memcpy(saRecord->saKey, key, keylen);
++
++	if (IS_RFC3686(flags))
++		saRecord->saNonce = nonce;
++
++	/* Default for now, might be used for ESP offload */
++	saRecord->saCmd1.bits.seqNumCheck = 0;
++	saRecord->saSpi = 0x0;
++	saRecord->saSeqNumMask[0] = 0x0;
++	saRecord->saSeqNumMask[1] = 0x0;
++}
++
++/*
++ * Poor mans Scatter/gather function:
++ * Create a Descriptor for every segment to avoid copying buffers.
++ * For performance better to wait for hardware to perform multiple DMA
++ *
++ */
++inline int mtk_scatter_combine(struct mtk_device *mtk,
++ 			struct mtk_cipher_reqctx *rctx,
++			struct scatterlist *sgsrc, struct scatterlist *sgdst,
++			u32 datalen,  bool complete, unsigned int *areq,
++			int offsetin)
++{
++	dma_addr_t saRecord_base = rctx->saRecord_base;
++	dma_addr_t saState_base;
++	unsigned int remainin, remainout;
++	int offsetout = 0;
++	u32 n, len;
++	dma_addr_t saddr, daddr;
++	u32 srcAddr, dstAddr;
++	bool nextin = false;
++	bool nextout = false;
++	struct eip93_descriptor_s cdesc;
++	int ndesc_cdr = 0, err;
++
++	if (complete)
++		saState_base = rctx->saState_base;
++	else
++		saState_base = rctx->saState_base_ctr;
++
++	cdesc.peCrtlStat.word = 0;
++	cdesc.peCrtlStat.bits.hostReady = 1;
++	cdesc.peCrtlStat.bits.prngMode = 0;
++	cdesc.peCrtlStat.bits.hashFinal = 1;
++	cdesc.peCrtlStat.bits.padCrtlStat = 0;
++	cdesc.peCrtlStat.bits.peReady = 0;
++	cdesc.saAddr = saRecord_base;
++	cdesc.stateAddr = saState_base;
++	cdesc.arc4Addr = (u32)areq;
++	if (IS_HMAC(rctx->flags))
++		cdesc.userId = MTK_DESC_AEAD;
++	else
++		cdesc.userId = MTK_DESC_SKCIPHER;
++	cdesc.peLength.word = 0;
++	cdesc.peLength.bits.byPass = 0;
++	cdesc.peLength.bits.hostReady = 1;
++
++	n = datalen;
++	remainin = min(sg_dma_len(sgsrc), n);
++	remainout = min(sg_dma_len(sgdst), n);
++	saddr = sg_dma_address(sgsrc);
++	daddr = sg_dma_address(sgdst);
++
++	do {
++		if (nextin) {
++			sgsrc = sg_next(sgsrc);
++			remainin = min(sg_dma_len(sgsrc), n);
++			if (remainin == 0)
++				continue;
++
++			saddr = sg_dma_address(sgsrc);
++			offsetin = 0;
++			nextin = false;
++		}
++
++		if (nextout) {
++			sgdst = sg_next(sgdst);
++			remainout = min(sg_dma_len(sgdst), n);
++			if (remainout == 0)
++				continue;
++
++			daddr = sg_dma_address(sgdst);
++			offsetout = 0;
++			nextout = false;
++		}
++		srcAddr = saddr + offsetin;
++		dstAddr = daddr + offsetout;
++
++		if (remainin == remainout) {
++			len = remainin;
++				nextin = true;
++				nextout = true;
++		} else if (remainin < remainout) {
++			len = remainin;
++				offsetout += len;
++				remainout -= len;
++				nextin = true;
++		} else {
++			len = remainout;
++				offsetin += len;
++				remainin -= len;
++				nextout = true;
++		}
++		n -= len;
++
++		cdesc.srcAddr = srcAddr;
++		cdesc.dstAddr = dstAddr;
++		cdesc.peLength.bits.length = len;
++
++		if (n == 0)
++			if (complete == true) {
++				cdesc.userId |= MTK_DESC_LAST;
++				cdesc.userId |= MTK_DESC_FINISH;
++				}
++
++		err = mtk_put_descriptor(mtk, cdesc);
++		if (err)
++			dev_err(mtk->dev, "No empty Descriptor space");
++
++		ndesc_cdr++;
++	} while (n);
++
++	return ndesc_cdr;
++}
++
++int mtk_send_req(struct crypto_async_request *base,
++		const struct mtk_cipher_ctx *ctx,
++		struct scatterlist *reqsrc, struct scatterlist *reqdst,
++		const u8 *reqiv, struct mtk_cipher_reqctx *rctx)
++{
++	struct mtk_device *mtk = ctx->mtk;
++	int ndesc_cdr = 0, ctr_cdr = 0;
++	int offset = 0, err;
++	int src_nents, dst_nents;
++	u32 aad = rctx->assoclen;
++	u32 textsize = rctx->textsize;
++	u32 authsize = rctx->authsize;
++	u32 datalen = aad + textsize;
++	u32 totlen_src = datalen;
++	u32 totlen_dst = datalen;
++	struct scatterlist *src, *src_ctr;
++	struct scatterlist *dst, *dst_ctr;
++	struct saRecord_s *saRecord;
++	struct saState_s *saState;
++	u32 start, end, ctr, blocks;
++	unsigned long flags = rctx->flags;
++	bool overflow;
++	bool complete = true;
++	bool src_align = true, dst_align = true;
++	u32 iv[AES_BLOCK_SIZE / sizeof(u32)], *esph;
++	int blksize = 1, offsetin = 0;
++
++	switch ((flags & MTK_ALG_MASK))	{
++	case MTK_ALG_AES:
++		blksize = AES_BLOCK_SIZE;
++		break;
++	case MTK_ALG_DES:
++		blksize = DES_BLOCK_SIZE;
++		break;
++	case MTK_ALG_3DES:
++		blksize = DES3_EDE_BLOCK_SIZE;
++		break;
++	}
++
++	if (!IS_CTR(rctx->flags)) {
++		if (IS_GENIV(rctx->flags))
++			textsize -= rctx->ivsize;
++		if (!IS_ALIGNED(textsize, blksize))
++			return -EINVAL;
++	}
++
++	rctx->sg_src = reqsrc;
++	src = reqsrc;
++	rctx->sg_dst = reqdst;
++	dst = reqdst;
++
++	if (ctx->aead) {
++		if (IS_ENCRYPT(flags))
++			totlen_dst += authsize;
++		else
++			totlen_src += authsize;
++	}
++
++	src_nents = sg_nents_for_len(src, totlen_src);
++	dst_nents = sg_nents_for_len(dst, totlen_dst);
++
++	if (src == dst) {
++		src_nents = max(src_nents, dst_nents);
++		dst_nents = src_nents;
++		if (unlikely((totlen_src || totlen_dst) &&
++		    (src_nents <= 0))) {
++			dev_err(mtk->dev, "In-place buffer not large enough (need %d bytes)!",
++				max(totlen_src, totlen_dst));
++			return -EINVAL;
++		}
++	} else {
++		if (unlikely(totlen_src && (src_nents <= 0))) {
++			dev_err(mtk->dev, "Source buffer not large enough (need %d bytes)!",
++				totlen_src);
++			return -EINVAL;
++		}
++
++		if (unlikely(totlen_dst && (dst_nents <= 0))) {
++			dev_err(mtk->dev, "Dest buffer not large enough (need %d bytes)!",
++				totlen_dst);
++			return -EINVAL;
++		}
++	}
++
++	if (ctx->aead) {
++		if (dst_nents == 1 && src_nents == 1) {
++			src_align = mtk_is_sg_aligned(src, totlen_src, blksize);
++			if (src ==  dst)
++				dst_align = src_align;
++			else
++				dst_align = mtk_is_sg_aligned(reqdst,
++							totlen_dst, blksize);
++		} else {
++			src_align = false;
++			dst_align = false;
++		}
++	} else {
++		src_align = mtk_is_sg_aligned(src, totlen_src, blksize);
++		if (src == dst)
++			dst_align = src_align;
++		else
++			dst_align = mtk_is_sg_aligned(reqdst, totlen_dst,
++								blksize);
++	}
++
++	if (!src_align) {
++		err = mtk_make_sg_cpy(mtk, rctx->sg_src, &rctx->sg_src,
++					totlen_src, rctx, true);
++		if (err)
++			return err;
++		src = rctx->sg_src;
++	}
++
++	if (!dst_align) {
++		err = mtk_make_sg_cpy(mtk, rctx->sg_dst, &rctx->sg_dst,
++					totlen_dst, rctx, false);
++		if (err)
++			return err;
++
++		dst = rctx->sg_dst;
++	}
++
++	rctx->saState_ctr = NULL;
++	rctx->saState = NULL;
++
++	if ((IS_ECB(flags)) || (IS_GENIV(flags))) {
++		rctx->iv_dma = false;
++		rctx->saState_base = NULL;
++		goto skip_iv;
++	}
++
++	/* make sure IV is DMA-able */
++	if (!IS_ALIGNED((u32)reqiv, 16))
++			rctx->iv_dma = false;
++	memcpy(iv, reqiv, rctx->ivsize);
++
++	overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
++
++	if (overflow) {
++		/* Compute data length. */
++		blocks = DIV_ROUND_UP(totlen_src, AES_BLOCK_SIZE);
++		ctr = be32_to_cpu(iv[3]);
++		/* Check 32bit counter overflow. */
++		start = ctr;
++		end = start + blocks - 1;
++		if (end < start) {
++			offset = AES_BLOCK_SIZE * -start;
++			/*
++			 * Increment the counter manually to cope with
++			 * the hardware counter overflow.
++			 */
++			iv[3] = 0xffffffff;
++			crypto_inc((u8 *)iv, AES_BLOCK_SIZE);
++			complete = false;
++			rctx->saState_ctr = dma_pool_zalloc(mtk->saState_pool,
++				GFP_KERNEL, &rctx->saState_base_ctr);
++			if (!rctx->saState_ctr)
++				dev_err(mtk->dev, "No State_ctr DMA memory\n");
++
++			memcpy(rctx->saState_ctr->stateIv, reqiv, rctx->ivsize);
++		}
++	}
++
++	if (rctx->iv_dma) {
++		rctx->saState = (void *)reqiv;
++	} else {
++		rctx->saState = dma_pool_zalloc(mtk->saState_pool,
++					GFP_KERNEL, &rctx->saState_base);
++		if (!rctx->saState)
++			dev_err(mtk->dev, "No saState DMA memory\n");
++	}
++
++	saState = rctx->saState;
++
++	if (rctx->saState_ctr)
++		memcpy(saState->stateIv, iv, rctx->ivsize);
++
++	if (IS_RFC3686(flags)) {
++		saState->stateIv[0] = ctx->sa->saNonce;
++		saState->stateIv[1] = iv[0];
++		saState->stateIv[2] = iv[1];
++		saState->stateIv[3] = cpu_to_be32(1);
++	}
++
++	if (rctx->iv_dma)
++		rctx->saState_base = dma_map_single(mtk->dev, (void *)reqiv,
++						rctx->ivsize,	DMA_TO_DEVICE);
++	else if (IS_CBC(flags) || overflow)
++			memcpy(saState->stateIv, iv, rctx->ivsize);
++
++skip_iv:
++	rctx->saRecord = dma_pool_zalloc(mtk->saRecord_pool, GFP_KERNEL,
++					&rctx->saRecord_base);
++	if (!rctx->saRecord)
++		dev_err(mtk->dev, "No saRecord DMA memory\n");
++
++	saRecord = rctx->saRecord;
++
++	memcpy(saRecord, ctx->sa, sizeof(struct saRecord_s));
++
++	if (IS_DECRYPT(flags))
++		saRecord->saCmd0.bits.direction = 1;
++
++	if ((IS_ECB(flags)) || (IS_GENIV(flags)))
++		saRecord->saCmd0.bits.saveIv = 0;
++
++	if (IS_HMAC(flags)) {
++		saRecord->saCmd1.bits.byteOffset = 0;
++		saRecord->saCmd1.bits.hashCryptOffset = (aad / 4);
++		saRecord->saCmd0.bits.digestLength = (authsize / 4);
++	}
++
++	if (ctx->aead) {
++		saRecord->saCmd0.bits.opCode = 1;
++		if (IS_DECRYPT(flags))
++			saRecord->saCmd1.bits.copyDigest = 0;
++	}
++
++	if (IS_GENIV(flags)) {
++		saRecord->saCmd0.bits.opCode = 0;
++		saRecord->saCmd0.bits.opGroup = 1;
++		saRecord->saCmd1.bits.seqNumCheck = 1;
++
++		if (IS_ENCRYPT(flags)) {
++			datalen = rctx->textsize - rctx->ivsize;
++			/* seems EIP93 needs to process the header itself
++			 * So get the spi and sequence number from orginal
++			 * header for now
++			 */
++			esph = sg_virt(rctx->sg_src);
++			saRecord->saSpi = ntohl(esph[0]);
++			saRecord->saSeqNum[0] = ntohl(esph[1]) - 1;
++			offsetin = rctx->assoclen + rctx->ivsize;
++			saRecord->saCmd1.bits.copyHeader = 0;
++			saRecord->saCmd0.bits.hdrProc = 1;
++			saRecord->saCmd0.bits.ivSource = 3;
++		} else {
++			esph = sg_virt(rctx->sg_src);
++			saRecord->saSpi = ntohl(esph[0]);
++			saRecord->saSeqNum[0] = ntohl(esph[1]);
++			saRecord->saCmd1.bits.copyHeader = 1;
++			saRecord->saCmd0.bits.hdrProc = 1;
++			saRecord->saCmd0.bits.ivSource = 1;
++			datalen += rctx->authsize;
++		}
++	}
++
++	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
++	 * implies __dma_cache_wback_inv
++	 */
++	dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
++	if (src != dst)
++		dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
++
++
++	if (unlikely(complete == false)) {
++		src_ctr = src;
++		dst_ctr = dst;
++		/* process until offset of the counter overflow */
++		ctr_cdr = mtk_scatter_combine(mtk, rctx, src, dst, offset,
++						complete, (void *)base, 0);
++		/* Jump to offset. */
++		src = scatterwalk_ffwd(rctx->ctr_src, src_ctr, offset);
++		dst = ((src_ctr == dst_ctr) ? src :
++			scatterwalk_ffwd(rctx->ctr_dst, dst_ctr, offset));
++
++		datalen -= offset;
++		complete = true;
++		/* map DMA_BIDIRECTIONAL to invalidate cache on destination */
++		dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
++		if (src != dst)
++			dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
++	}
++
++	ndesc_cdr = mtk_scatter_combine(mtk, rctx, src, dst, datalen, complete,
++			(void *)base, offsetin);
++
++	return ndesc_cdr + ctr_cdr;
++}
++
++static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
++			struct scatterlist *reqsrc, struct scatterlist *reqdst)
++{
++	u32 len = rctx->assoclen + rctx->textsize;
++	u32 *otag;
++	int i;
++
++	if (rctx->sg_src == rctx->sg_dst) {
++		dma_unmap_sg(mtk->dev, rctx->sg_dst, sg_nents(rctx->sg_dst),
++							DMA_FROM_DEVICE);
++		goto process_tag;
++	}
++
++	dma_unmap_sg(mtk->dev, rctx->sg_src, sg_nents(rctx->sg_src),
++							DMA_TO_DEVICE);
++
++	if (rctx->sg_src != reqsrc)
++		mtk_free_sg_cpy(len +  rctx->authsize, &rctx->sg_src);
++
++	dma_unmap_sg(mtk->dev, rctx->sg_dst, sg_nents(rctx->sg_dst),
++							DMA_FROM_DEVICE);
++
++	/* SHA tags need convertion from net-to-host */
++process_tag:
++	if (rctx->authsize) {
++		if ((IS_ENCRYPT(rctx->flags)) && (!IS_GENIV(rctx->flags))) {
++			if (!IS_HASH_MD5(rctx->flags)) {
++				otag = sg_virt(rctx->sg_dst) + len;
++				for (i = 0; i < (rctx->authsize / 4); i++)
++					otag[i] = ntohl(otag[i]);
++			}
++		}
++	}
++
++	if (rctx->sg_dst != reqdst) {
++		sg_copy_from_buffer(reqdst, sg_nents(reqdst),
++				sg_virt(rctx->sg_dst), len + rctx->authsize);
++		mtk_free_sg_cpy(len + rctx->authsize, &rctx->sg_dst);
++	}
++}
++
++void mtk_handle_result(struct mtk_device *mtk,
++	struct crypto_async_request *async, struct mtk_cipher_reqctx *rctx,
++	struct scatterlist *reqsrc, struct scatterlist *reqdst,	u8 *reqiv,
++	bool complete, int err)
++{
++	mtk_unmap_dma(mtk, rctx, reqsrc, reqdst);
++
++	if (IS_BUSY(rctx->flags)) {
++		local_bh_disable();
++		async->complete(async, -EINPROGRESS);
++		local_bh_enable();
++	}
++
++	if (!complete)
++		return;
++
++	if (rctx->iv_dma) {
++		dma_unmap_single(mtk->dev, rctx->saState_base, rctx->ivsize,
++						DMA_BIDIRECTIONAL);
++	} else {
++		if ((!IS_ECB(rctx->flags)) || (!IS_GENIV(rctx->flags)))  {
++			memcpy(reqiv, rctx->saState->stateIv, rctx->ivsize);
++			if (rctx->saState)
++				dma_pool_free(mtk->saState_pool, rctx->saState,
++							rctx->saState_base);
++		}
++	}
++
++	if (rctx->saState_ctr)
++		dma_pool_free(mtk->saState_pool, rctx->saState_ctr,
++						rctx->saState_base_ctr);
++
++	dma_pool_free(mtk->saRecord_pool, rctx->saRecord, rctx->saRecord_base);
++
++	local_bh_disable();
++	async->complete(async, err);
++	local_bh_enable();
++}
++
++void mtk_skcipher_handle_result(struct mtk_device *mtk,
++				struct crypto_async_request *async,
++				bool complete, int err)
++{
++	struct skcipher_request *req = skcipher_request_cast(async);
++	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
++
++	mtk_handle_result(mtk, async, rctx, req->src, req->dst, req->iv,
++				complete, err);
++}
++
++void mtk_aead_handle_result(struct mtk_device *mtk,
++				struct crypto_async_request *async,
++				bool complete,  int err)
++{
++	struct aead_request *req = aead_request_cast(async);
++	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
++
++	mtk_handle_result(mtk, async, rctx, req->src, req->dst, req->iv,
++				complete, err);
++}
++
++/* Crypto skcipher API functions */
++static int mtk_skcipher_cra_init(struct crypto_tfm *tfm)
++{
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
++	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
++				struct mtk_alg_template, alg.skcipher.base);
++
++	memset(ctx, 0, sizeof(*ctx));
++
++	ctx->fallback = NULL;
++
++	if (IS_AES(tmpl->flags)) {
++		ctx->fallback = crypto_alloc_skcipher(crypto_tfm_alg_name(tfm),
++				0, CRYPTO_ALG_NEED_FALLBACK);
++		if (IS_ERR(ctx->fallback))
++			ctx->fallback = NULL;
++	}
++
++	if (IS_AES(tmpl->flags) && (ctx->fallback))
++		crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
++					sizeof(struct mtk_cipher_reqctx) +
++					crypto_skcipher_reqsize(ctx->fallback));
++	else
++		crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
++			offsetof(struct mtk_cipher_reqctx, fallback_req));
++
++	ctx->mtk = tmpl->mtk;
++	ctx->aead = false;
++	ctx->sa = kzalloc(sizeof(struct saRecord_s), GFP_KERNEL);
++	if (!ctx->sa)
++		printk("!! no sa memory\n");
++
++	return 0;
++}
++
++static void mtk_skcipher_cra_exit(struct crypto_tfm *tfm)
++{
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
++
++	kfree(ctx->sa);
++
++	if (ctx->fallback)
++		crypto_free_skcipher(ctx->fallback);
++}
++
++static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
++				 unsigned int len)
++{
++	struct crypto_tfm *tfm = crypto_skcipher_tfm(ctfm);
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
++	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
++				struct mtk_alg_template, alg.skcipher.base);
++	unsigned long flags = tmpl->flags;
++	struct crypto_aes_ctx aes;
++	unsigned int keylen = len;
++	u32 nonce = 0;
++	int ret = 0;
++
++	if (!key || !keylen)
++		return -EINVAL;
++
++	if (IS_RFC3686(flags)) {
++		/* last 4 bytes of key are the nonce! */
++		keylen -= CTR_RFC3686_NONCE_SIZE;
++		memcpy(&nonce, key + keylen, CTR_RFC3686_NONCE_SIZE);
++	}
++
++	switch ((flags & MTK_ALG_MASK)) {
++	case MTK_ALG_AES:
++		ret = aes_expandkey(&aes, key, keylen);
++		break;
++	case MTK_ALG_DES:
++		ret = verify_skcipher_des_key(ctfm, key);
++		break;
++	case MTK_ALG_3DES:
++		if (keylen != DES3_EDE_KEY_SIZE) {
++			ret = -EINVAL;
++			break;
++		}
++		ret = verify_skcipher_des3_key(ctfm, key);
++	}
++
++	if (ret) {
++		crypto_skcipher_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
++		return ret;
++	}
++
++	mtk_ctx_saRecord(ctx, key, nonce, keylen, flags);
++
++	if (ctx->fallback)
++		ret = crypto_skcipher_setkey(ctx->fallback, key, len);
++
++	return ret;
++}
++
++static int mtk_skcipher_crypt(struct skcipher_request *req)
++{
++	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
++	struct crypto_async_request *base = &req->base;
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
++	struct mtk_device *mtk = ctx->mtk;
++	int ret;
++	int DescriptorCountDone = MTK_RING_SIZE - 1;
++	int DescriptorDoneTimeout = 3;
++	int DescriptorPendingCount = 0;
++	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
++	u32 ivsize = crypto_skcipher_ivsize(skcipher);
++
++	if (!req->cryptlen)
++		return 0;
++
++	if ((req->cryptlen <= aes_sw) && (ctx->fallback)) {
++		skcipher_request_set_tfm(&rctx->fallback_req, ctx->fallback);
++		skcipher_request_set_callback(&rctx->fallback_req,
++					req->base.flags,
++					req->base.complete,
++					req->base.data);
++		skcipher_request_set_crypt(&rctx->fallback_req, req->src,
++					req->dst, req->cryptlen, req->iv);
++		if (IS_ENCRYPT(rctx->flags))
++			ret = crypto_skcipher_encrypt(&rctx->fallback_req);
++		else
++			ret = crypto_skcipher_decrypt(&rctx->fallback_req);
++
++		return ret;
++	}
++
++	if (mtk->ring->requests > MTK_RING_BUSY)
++		return -EAGAIN;
++
++	rctx->textsize = req->cryptlen;
++	rctx->authsize = 0;
++	rctx->assoclen = 0;
++	rctx->iv_dma = true;
++	rctx->ivsize = ivsize;
++
++	ret = mtk_send_req(base, ctx, req->src, req->dst, req->iv,
++				rctx);
++
++	if (ret < 0) {
++		base->complete(base, ret);
++		return ret;
++	}
++
++	if (ret == 0)
++		return 0;
++
++	spin_lock_bh(&mtk->ring->lock);
++	mtk->ring->requests += ret;
++
++	if (!mtk->ring->busy) {
++		DescriptorPendingCount = min_t(int, mtk->ring->requests, 32);
++		writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
++			(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
++			((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
++			mtk->base + EIP93_REG_PE_RING_THRESH);
++		mtk->ring->busy = true;
++	}
++	spin_unlock_bh(&mtk->ring->lock);
++	/* Writing new descriptor count starts DMA action */
++	writel(ret, mtk->base + EIP93_REG_PE_CD_COUNT);
++
++	if (mtk->ring->requests > MTK_RING_BUSY) {
++		rctx->flags |= MTK_BUSY;
++		return -EBUSY;
++	}
++
++	return -EINPROGRESS;
++}
++
++static int mtk_skcipher_encrypt(struct skcipher_request *req)
++{
++	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
++	struct crypto_async_request *base = &req->base;
++	struct mtk_alg_template *tmpl = container_of(base->tfm->__crt_alg,
++				struct mtk_alg_template, alg.skcipher.base);
++
++	rctx->flags = tmpl->flags;
++	rctx->flags |= MTK_ENCRYPT;
++
++	return mtk_skcipher_crypt(req);
++}
++
++static int mtk_skcipher_decrypt(struct skcipher_request *req)
++{
++	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
++	struct crypto_async_request *base = &req->base;
++	struct mtk_alg_template *tmpl = container_of(base->tfm->__crt_alg,
++				struct mtk_alg_template, alg.skcipher.base);
++
++	rctx->flags = tmpl->flags;
++	rctx->flags |= MTK_DECRYPT;
++
++	return mtk_skcipher_crypt(req);
++}
++/* Crypto aead API functions */
++static int mtk_aead_cra_init(struct crypto_tfm *tfm)
++{
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
++	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
++				struct mtk_alg_template, alg.aead.base);
++	unsigned long flags = tmpl->flags;
++	char *alg_base;
++
++	memset(ctx, 0, sizeof(*ctx));
++
++	crypto_aead_set_reqsize(__crypto_aead_cast(tfm),
++			sizeof(struct mtk_cipher_reqctx));
++
++	ctx->mtk = tmpl->mtk;
++	ctx->aead = true;
++	ctx->fallback = NULL;
++
++	ctx->sa = kzalloc(sizeof(struct saRecord_s), GFP_KERNEL);
++	if (!ctx->sa)
++		printk("!! no sa memory\n");
++
++	/* software workaround for now */
++	if (IS_HASH_MD5(flags))
++		alg_base = "md5";
++	if (IS_HASH_SHA1(flags))
++		alg_base = "sha1";
++	if (IS_HASH_SHA224(flags))
++		alg_base = "sha224";
++	if (IS_HASH_SHA256(flags))
++		alg_base = "sha256";
++
++	ctx->shash = crypto_alloc_shash(alg_base, 0, CRYPTO_ALG_NEED_FALLBACK);
++
++	if (IS_ERR(ctx->shash)) {
++		dev_err(ctx->mtk->dev, "base driver %s could not be loaded.\n",
++				alg_base);
++		return PTR_ERR(ctx->shash);
++	}
++
++	return 0;
++}
++
++static void mtk_aead_cra_exit(struct crypto_tfm *tfm)
++{
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
++
++	if (ctx->shash)
++		crypto_free_shash(ctx->shash);
++
++	kfree(ctx->sa);
++}
++
++static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
++			unsigned int keylen)
++{
++	struct crypto_tfm *tfm = crypto_aead_tfm(ctfm);
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
++	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
++				struct mtk_alg_template, alg.skcipher.base);
++	unsigned long flags = tmpl->flags;
++	struct crypto_authenc_keys keys;
++	int bs = crypto_shash_blocksize(ctx->shash);
++	int ds = crypto_shash_digestsize(ctx->shash);
++	u8 *ipad, *opad;
++	unsigned int i, err;
++	u32 nonce;
++
++	SHASH_DESC_ON_STACK(shash, ctx->shash);
++
++	if (crypto_authenc_extractkeys(&keys, key, keylen) != 0)
++		goto badkey;
++
++	if (IS_RFC3686(flags)) {
++		if (keylen < CTR_RFC3686_NONCE_SIZE)
++			return -EINVAL;
++
++		keylen -= CTR_RFC3686_NONCE_SIZE;
++		memcpy(&nonce, key + keylen, CTR_RFC3686_NONCE_SIZE);
++	}
++
++	if (keys.enckeylen > AES_MAX_KEY_SIZE)
++		goto badkey;
++
++	/* auth key
++	 *
++	 * EIP93 can only authenticate with hash of the key
++	 * do software shash until EIP93 hash function complete.
++	 */
++	ipad = kcalloc(2, SHA512_BLOCK_SIZE, GFP_KERNEL);
++	if (!ipad)
++		return -ENOMEM;
++
++	opad = ipad + SHA512_BLOCK_SIZE;
++
++	shash->tfm = ctx->shash;
++
++	if (keys.authkeylen > bs) {
++		err = crypto_shash_digest(shash, keys.authkey,
++					keys.authkeylen, ipad);
++		if (err)
++			return err;
++
++		keys.authkeylen = ds;
++	} else
++		memcpy(ipad, keys.authkey, keys.authkeylen);
++
++	memset(ipad + keys.authkeylen, 0, bs - keys.authkeylen);
++	memcpy(opad, ipad, bs);
++
++	for (i = 0; i < bs; i++) {
++		ipad[i] ^= HMAC_IPAD_VALUE;
++		opad[i] ^= HMAC_OPAD_VALUE;
++	}
++
++	err = crypto_shash_init(shash) ?:
++				 crypto_shash_update(shash, ipad, bs) ?:
++				 crypto_shash_export(shash, ipad) ?:
++				 crypto_shash_init(shash) ?:
++				 crypto_shash_update(shash, opad, bs) ?:
++				 crypto_shash_export(shash, opad);
++
++	if (err)
++		return err;
++
++	/* Encryption key */
++	mtk_ctx_saRecord(ctx, keys.enckey, nonce, keys.enckeylen, flags);
++	/* add auth key */
++	memcpy(&ctx->sa->saIDigest, ipad, SHA256_DIGEST_SIZE);
++	memcpy(&ctx->sa->saODigest, opad, SHA256_DIGEST_SIZE);
++
++	kfree(ipad);
++	return err;
++
++badkey:
++	crypto_aead_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
++	return -EINVAL;
++}
++
++static int mtk_aead_setauthsize(struct crypto_aead *ctfm,
++				unsigned int authsize)
++{
++	struct crypto_tfm *tfm = crypto_aead_tfm(ctfm);
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
++	/* might be needed for IPSec SHA1 (3 Words vs 5 Words)
++	u32 maxauth = crypto_aead_maxauthsize(ctfm);
++	*/
++
++	ctx->authsize = authsize;
++
++	return 0;
++}
++
++static int mtk_aead_crypt(struct aead_request *req)
++{
++	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
++	struct crypto_async_request *base = &req->base;
++	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
++	struct mtk_device *mtk = ctx->mtk;
++	struct crypto_aead *aead = crypto_aead_reqtfm(req);
++	u32 ivsize = crypto_aead_ivsize(aead);
++	int ret;
++	int DescriptorCountDone = MTK_RING_SIZE - 1;
++	int DescriptorDoneTimeout = 3;
++	int DescriptorPendingCount = 0;
++
++	rctx->textsize = req->cryptlen;
++	rctx->assoclen = req->assoclen;
++	rctx->authsize = ctx->authsize;
++	rctx->iv_dma = false;
++	rctx->ivsize = ivsize;
++
++	if IS_DECRYPT(rctx->flags)
++		rctx->textsize -= rctx->authsize;
++
++	if (!rctx->textsize)
++		return 0;
++
++	if (mtk->ring->requests > MTK_RING_BUSY)
++		return -EAGAIN;
++
++	ret = mtk_send_req(base, ctx, req->src, req->dst, req->iv,
++				rctx);
++
++	if (ret < 0) {
++		base->complete(base, ret);
++		return ret;
++	}
++
++	if (ret == 0)
++		return 0;
++
++	spin_lock_bh(&mtk->ring->lock);
++	mtk->ring->requests += ret;
++
++	if (!mtk->ring->busy) {
++		DescriptorPendingCount = min_t(int, mtk->ring->requests, 32);
++		writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
++			(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
++			((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
++			mtk->base + EIP93_REG_PE_RING_THRESH);
++		mtk->ring->busy = true;
++	}
++	spin_unlock_bh(&mtk->ring->lock);
++
++	/* Writing new descriptor count starts DMA action */
++	writel(ret, mtk->base + EIP93_REG_PE_CD_COUNT);
++
++	if (mtk->ring->requests > MTK_RING_BUSY) {
++		rctx->flags |= MTK_BUSY;
++		return -EBUSY;
++	}
++
++	return -EINPROGRESS;
++}
++
++static int mtk_aead_encrypt(struct aead_request *req)
++{
++	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
++	struct crypto_async_request *base = &req->base;
++	struct mtk_alg_template *tmpl = container_of(base->tfm->__crt_alg,
++				struct mtk_alg_template, alg.aead.base);
++
++	rctx->flags = tmpl->flags;
++	rctx->flags |= MTK_ENCRYPT;
++
++	return mtk_aead_crypt(req);
++}
++
++static int mtk_aead_decrypt(struct aead_request *req)
++{
++	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
++	struct crypto_async_request *base = &req->base;
++	struct mtk_alg_template *tmpl = container_of(base->tfm->__crt_alg,
++				struct mtk_alg_template, alg.aead.base);
++
++	rctx->flags = tmpl->flags;
++	rctx->flags |= MTK_DECRYPT;
++
++	return mtk_aead_crypt(req);
++}
++
++/* Available algorithms in this module */
++
++struct mtk_alg_template mtk_alg_ecb_des = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_ECB | MTK_ALG_DES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = DES_KEY_SIZE,
++		.max_keysize = DES_KEY_SIZE,
++		.ivsize	= 0,
++		.base = {
++			.cra_name = "ecb(des)",
++			.cra_driver_name = "ebc(des-eip93)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_cbc_des = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_CBC | MTK_ALG_DES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = DES_KEY_SIZE,
++		.max_keysize = DES_KEY_SIZE,
++		.ivsize	= DES_BLOCK_SIZE,
++		.base = {
++			.cra_name = "cbc(des)",
++			.cra_driver_name = "cbc(des-eip93)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_ecb_des3_ede = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_ECB | MTK_ALG_3DES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = DES3_EDE_KEY_SIZE,
++		.max_keysize = DES3_EDE_KEY_SIZE,
++		.ivsize	= 0,
++		.base = {
++			.cra_name = "ecb(des3_ede)",
++			.cra_driver_name = "ecb(des3_ede-eip93)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_cbc_des3_ede = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_CBC | MTK_ALG_3DES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = DES3_EDE_KEY_SIZE,
++		.max_keysize = DES3_EDE_KEY_SIZE,
++		.ivsize	= DES3_EDE_BLOCK_SIZE,
++		.base = {
++			.cra_name = "cbc(des3_ede)",
++			.cra_driver_name = "cbc(des3_ede-eip93)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_ecb_aes = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_ECB | MTK_ALG_AES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = AES_MIN_KEY_SIZE,
++		.max_keysize = AES_MAX_KEY_SIZE,
++		.ivsize	= 0,
++		.base = {
++			.cra_name = "ecb(aes)",
++			.cra_driver_name = "ecb(aes-eip93)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_NEED_FALLBACK |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0xf,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_cbc_aes = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_CBC | MTK_ALG_AES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = AES_MIN_KEY_SIZE,
++		.max_keysize = AES_MAX_KEY_SIZE,
++		.ivsize	= AES_BLOCK_SIZE,
++		.base = {
++			.cra_name = "cbc(aes)",
++			.cra_driver_name = "cbc(aes-eip93)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_NEED_FALLBACK |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0xf,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_ctr_aes = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_CTR | MTK_ALG_AES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = AES_MIN_KEY_SIZE,
++		.max_keysize = AES_MAX_KEY_SIZE,
++		.ivsize	= AES_BLOCK_SIZE,
++		.base = {
++			.cra_name = "ctr(aes)",
++			.cra_driver_name = "ctr(aes-eip93)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++				     CRYPTO_ALG_NEED_FALLBACK |
++				     CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0xf,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_rfc3686_aes = {
++	.type = MTK_ALG_TYPE_SKCIPHER,
++	.flags = MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_ALG_AES,
++	.alg.skcipher = {
++		.setkey = mtk_skcipher_setkey,
++		.encrypt = mtk_skcipher_encrypt,
++		.decrypt = mtk_skcipher_decrypt,
++		.min_keysize = AES_MIN_KEY_SIZE + CTR_RFC3686_NONCE_SIZE,
++		.max_keysize = AES_MAX_KEY_SIZE + CTR_RFC3686_NONCE_SIZE,
++		.ivsize	= CTR_RFC3686_IV_SIZE,
++		.base = {
++			.cra_name = "rfc3686(ctr(aes))",
++			.cra_driver_name = "rfc3686(ctr(aes-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_NEED_FALLBACK |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0xf,
++			.cra_init = mtk_skcipher_cra_init,
++			.cra_exit = mtk_skcipher_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++/* Available authenc algorithms in this module */
++
++struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= AES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = MD5_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(md5),cbc(aes))",
++			.cra_driver_name =
++				"authenc(hmac(md5-eip93), cbc(aes-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_MODE_CBC | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= AES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA1_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha1),cbc(aes))",
++			.cra_driver_name =
++				"authenc(hmac(sha1-eip93),cbc(aes-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224 | MTK_MODE_CBC | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= AES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA224_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha224),cbc(aes))",
++			.cra_driver_name =
++				"authenc(hmac(sha224-eip93),cbc(aes-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 | MTK_MODE_CBC | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= AES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA256_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha256),cbc(aes))",
++			.cra_driver_name =
++				"authenc(hmac(sha256-eip93),cbc(aes-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_md5_rfc3686_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 |
++			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= CTR_RFC3686_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = MD5_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(md5),rfc3686(ctr(aes)))",
++			.cra_driver_name =
++			"authenc(hmac(md5-eip93),rfc3686(ctr(aes-eip93)))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha1_rfc3686_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 |
++			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= CTR_RFC3686_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA1_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha1),rfc3686(ctr(aes)))",
++			.cra_driver_name =
++			"authenc(hmac(sha1-eip93),rfc3686(ctr(aes-eip93)))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha224_rfc3686_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224 |
++			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= CTR_RFC3686_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA224_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha224),rfc3686(ctr(aes)))",
++			.cra_driver_name =
++			"authenc(hmac(sha224-eip93),rfc3686(ctr(aes-eip93)))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 |
++			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_ALG_AES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= CTR_RFC3686_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA256_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha256),rfc3686(ctr(aes)))",
++			.cra_driver_name =
++			"authenc(hmac(sha256-eip93),rfc3686(ctr(aes-eip93)))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC | MTK_ALG_DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = MD5_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(md5),cbc(des))",
++			.cra_driver_name =
++				"authenc(hmac(md5-eip93),cbc(des-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_MODE_CBC | MTK_ALG_DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA1_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha1),cbc(des))",
++			.cra_driver_name =
++				"authenc(hmac(sha1-eip93),cbc(des-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224 | MTK_MODE_CBC | MTK_ALG_DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA224_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha224),cbc(des))",
++			.cra_driver_name =
++				"authenc(hmac(sha224-eip93),cbc(des-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 | MTK_MODE_CBC | MTK_ALG_DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA256_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha256),cbc(des))",
++			.cra_driver_name =
++				"authenc(hmac(sha256-eip93),cbc(des-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des3_ede = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC | MTK_ALG_3DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES3_EDE_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = MD5_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(md5),cbc(des3_ede))",
++			.cra_driver_name =
++				"authenc(hmac(md5-eip93),cbc(des3_ede-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des3_ede = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_MODE_CBC | MTK_ALG_3DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES3_EDE_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA1_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha1),cbc(des3_ede))",
++			.cra_driver_name =
++				"authenc(hmac(sha1-eip93),cbc(des3_ede-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des3_ede = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224 | MTK_MODE_CBC | MTK_ALG_3DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES3_EDE_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA224_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha224),cbc(des3_ede))",
++			.cra_driver_name =
++			"authenc(hmac(sha224-eip93),cbc(des3_ede-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des3_ede = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 | MTK_MODE_CBC | MTK_ALG_3DES,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES3_EDE_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA256_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha256),cbc(des3_ede))",
++			.cra_driver_name =
++			"authenc(hmac(sha256-eip93),cbc(des3_ede-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++/* Single pass IPSEC ESP descriptor */
++struct mtk_alg_template mtk_alg_authenc_hmac_md5_ecb_null = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_MD5,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= NULL_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = MD5_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(md5),ecb(cipher_null))",
++			.cra_driver_name = "authenc(hmac(md5-eip93),"
++						"ecb(cipher_null)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = NULL_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ecb_null = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= NULL_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA1_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha1),ecb(cipher_null))",
++			.cra_driver_name = "authenc(hmac(sha1-eip93),"
++						"ecb(cipher_null)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = NULL_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ecb_null = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= NULL_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA224_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha224),ecb(cipher_null))",
++			.cra_driver_name = "authenc(hmac(sha224-eip93),"
++						"ecb(cipher_null)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = NULL_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= NULL_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA256_DIGEST_SIZE,
++		.base = {
++			.cra_name = "authenc(hmac(sha256),ecb(cipher_null))",
++			.cra_driver_name = "authenc(hmac(sha256-eip93),"
++						"ecb(cipher_null)",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = NULL_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0x0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC |
++			MTK_ALG_DES | MTK_GENIV,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= DES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = MD5_DIGEST_SIZE,
++		.base = {
++			.cra_name = "echainiv(authenc(hmac(md5),cbc(des)))",
++			.cra_driver_name = "echainiv(authenc(hmac(md5-eip93)"
++					",cbc(des-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = DES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_MODE_CBC |
++			MTK_ALG_AES | MTK_GENIV,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= AES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA1_DIGEST_SIZE,
++		.base = {
++			.cra_name = "echainiv(authenc(hmac(sha1),cbc(aes)))",
++			.cra_driver_name = "echainiv(authenc(hmac(sha1-eip93)"
++					",cbc(aes-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 | MTK_MODE_CBC |
++			MTK_ALG_AES | MTK_GENIV,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= AES_BLOCK_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA256_DIGEST_SIZE,
++		.base = {
++			.cra_name = "echainiv(authenc(hmac(sha256),cbc(aes)))",
++			.cra_driver_name = "echainiv(authenc(hmac(sha256-eip93)"
++				",cbc(aes-eip93))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = AES_BLOCK_SIZE,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_ALG_AES |
++			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_GENIV,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= CTR_RFC3686_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA1_DIGEST_SIZE,
++		.base = {
++			.cra_name = "seqiv(authenc(hmac(sha1),rfc3686(ctr(aes))))",
++			.cra_driver_name = "seqiv(authenc(hmac(sha1-eip93),"
++				"rfc3686(ctr(aes-eip93)))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
++
++struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes = {
++	.type = MTK_ALG_TYPE_AEAD,
++	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 | MTK_ALG_AES |
++			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_GENIV,
++	.alg.aead = {
++		.setkey = mtk_aead_setkey,
++		.encrypt = mtk_aead_encrypt,
++		.decrypt = mtk_aead_decrypt,
++		.ivsize	= CTR_RFC3686_IV_SIZE,
++		.setauthsize = mtk_aead_setauthsize,
++		.maxauthsize = SHA256_DIGEST_SIZE,
++		.base = {
++			.cra_name = "seqiv(authenc(hmac(sha256),rfc3686(ctr(aes))))",
++			.cra_driver_name = "seqiv(authenc(hmac(sha256-eip93),"
++				"rfc3686(ctr(aes-eip93)))",
++			.cra_priority = MTK_CRA_PRIORITY,
++			.cra_flags = CRYPTO_ALG_ASYNC |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++			.cra_blocksize = 1,
++			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
++			.cra_alignmask = 0,
++			.cra_init = mtk_aead_cra_init,
++			.cra_exit = mtk_aead_cra_exit,
++			.cra_module = THIS_MODULE,
++		},
++	},
++};
+diff --git a/package/custom/mtk-eip93/src/eip93-cipher.h b/package/custom/mtk-eip93/src/eip93-cipher.h
+new file mode 100644
+index 0000000000..fdeeaf6305
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-cipher.h
+@@ -0,0 +1,89 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++#ifndef _CIPHER_H_
++#define _CIPHER_H_
++
++extern struct mtk_alg_template mtk_alg_ecb_aes;
++extern struct mtk_alg_template mtk_alg_cbc_aes;
++extern struct mtk_alg_template mtk_alg_ctr_aes;
++extern struct mtk_alg_template mtk_alg_rfc3686_aes;
++extern struct mtk_alg_template mtk_alg_ecb_des;
++extern struct mtk_alg_template mtk_alg_cbc_des;
++extern struct mtk_alg_template mtk_alg_ecb_des3_ede;
++extern struct mtk_alg_template mtk_alg_cbc_des3_ede;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_ctr_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ctr_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ctr_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ctr_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_rfc3686_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_rfc3686_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_rfc3686_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des3_ede;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des3_ede;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des3_ede;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des3_ede;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_ecb_null;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ecb_null;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ecb_null;
++extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null;
++extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des;
++extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes;
++extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes;
++extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes;
++extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes;
++
++struct mtk_cipher_ctx {
++	struct mtk_device		*mtk;
++	struct saRecord_s		*sa;
++	struct crypto_skcipher		*fallback;
++	/* AEAD specific */
++	unsigned int			authsize;
++	struct crypto_shash		*shash;
++	bool				aead;
++};
++
++struct mtk_cipher_reqctx {
++	unsigned long			flags;
++	u32				textsize;
++	u32				ivsize;
++	bool				iv_dma;
++	struct saRecord_s		*saRecord;
++	dma_addr_t			saRecord_base;
++	struct saState_s		*saState;
++	dma_addr_t			saState_base;
++	/* copy in case of mis-alignment or AEAD if no-consecutive blocks */
++	struct scatterlist		*sg_src;
++	struct scatterlist		*sg_dst;
++	/* AES-CTR in case of counter overflow */
++	struct saState_s		*saState_ctr;
++	dma_addr_t			saState_base_ctr;
++	struct scatterlist		ctr_src[2];
++	struct scatterlist		ctr_dst[2];
++	/* AEAD */
++	u32				assoclen;
++	u32				authsize;
++	/* request fallback, keep at the end */
++	struct skcipher_request		fallback_req;
++};
++
++void mtk_skcipher_handle_result(struct mtk_device *mtk,
++				struct crypto_async_request *async,
++				bool complete, int err);
++
++void mtk_aead_handle_result(struct mtk_device *mtk,
++			struct crypto_async_request *async,
++			bool complete,  int err);
++#endif /* _CIPHER_H_ */
+diff --git a/package/custom/mtk-eip93/src/eip93-common.h b/package/custom/mtk-eip93/src/eip93-common.h
+new file mode 100644
+index 0000000000..5781494ae3
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-common.h
+@@ -0,0 +1,202 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++
++#ifndef _COMMON_H_
++#define _COMMON_H_
++
++#include <linux/bits.h>
++
++#define MTK_RING_SIZE			256
++#define MTK_RING_BUSY			224
++#define NUM_AES_BYPASS			256
++#define MTK_QUEUE_LENGTH		128
++#define MTK_CRA_PRIORITY		1500
++
++#define MTK_DESC_ASYNC			BIT(0)
++#define MTK_DESC_SKCIPHER		BIT(1)
++#define MTK_DESC_AEAD			BIT(2)
++#define MTK_DESC_AHASH			BIT(3)
++#define MTK_DESC_PRNG			BIT(4)
++#define MTK_DESC_FAKE_HMAC		BIT(5)
++#define MTK_DESC_LAST			BIT(6)
++#define MTK_DESC_FINISH			BIT(7)
++
++/* cipher algorithms */
++#define MTK_ALG_DES			BIT(0)
++#define MTK_ALG_3DES			BIT(1)
++#define MTK_ALG_AES			BIT(2)
++#define MTK_ALG_MASK			GENMASK(2, 0)
++/* hash and hmac algorithms */
++#define MTK_HASH_MD5			BIT(3)
++#define MTK_HASH_SHA1			BIT(4)
++#define MTK_HASH_SHA224			BIT(5)
++#define MTK_HASH_SHA256			BIT(6)
++#define MTK_HASH_HMAC			BIT(7)
++#define MTK_HASH_MASK			GENMASK(6, 3)
++/* cipher modes */
++#define MTK_MODE_CBC			BIT(8)
++#define MTK_MODE_ECB			BIT(9)
++#define MTK_MODE_CTR			BIT(10)
++#define MTK_MODE_RFC3686		BIT(11)
++#define MTK_MODE_MASK			GENMASK(10, 8)
++
++/* cipher encryption/decryption operations */
++#define MTK_ENCRYPT			BIT(12)
++#define MTK_DECRYPT			BIT(13)
++
++#define MTK_GENIV			BIT(14)
++#define MTK_BUSY			BIT(15)
++
++#define IS_DES(flags)			(flags & MTK_ALG_DES)
++#define IS_3DES(flags)			(flags & MTK_ALG_3DES)
++#define IS_AES(flags)			(flags & MTK_ALG_AES)
++
++#define IS_HASH_MD5(flags)		(flags & MTK_HASH_MD5)
++#define IS_HASH_SHA1(flags)		(flags & MTK_HASH_SHA1)
++#define IS_HASH_SHA224(flags)		(flags & MTK_HASH_SHA224)
++#define IS_HASH_SHA256(flags)		(flags & MTK_HASH_SHA256)
++#define IS_HMAC(flags)			(flags & MTK_HASH_HMAC)
++
++#define IS_CBC(mode)			(mode & MTK_MODE_CBC)
++#define IS_ECB(mode)			(mode & MTK_MODE_ECB)
++#define IS_CTR(mode)			(mode & MTK_MODE_CTR)
++#define IS_RFC3686(mode)		(mode & MTK_MODE_RFC3686)
++#define IS_GENIV(flags)			(flags & MTK_GENIV)
++
++#define IS_BUSY(flags)			(flags & MTK_BUSY)
++
++#define IS_ENCRYPT(dir)			(dir & MTK_ENCRYPT)
++#define IS_DECRYPT(dir)			(dir & MTK_DECRYPT)
++
++#define IS_CIPHER(flags)		(flags & (MTK_ALG_DES || \
++						MTK_ALG_3DES ||  \
++						MTK_ALG_AES))
++
++#define IS_HASH(flags)			(flags & (MTK_HASH_MD5 ||  \
++						MTK_HASH_SHA1 ||   \
++						MTK_HASH_SHA224 || \
++						MTK_HASH_SHA256))
++
++/*
++ * Interrupts of EIP93
++ */
++
++typedef enum {
++	EIP93_INT_PE_CDRTHRESH_REQ =	BIT(0),
++	EIP93_INT_PE_RDRTHRESH_REQ =	BIT(1),
++	EIP93_INT_PE_OPERATION_DONE =	BIT(9),
++	EIP93_INT_PE_INBUFTHRESH_REQ =	BIT(10),
++	EIP93_INT_PE_OUTBURTHRSH_REQ =	BIT(11),
++	EIP93_INT_PE_PRNG_IRQ =		BIT(12),
++	EIP93_INT_PE_ERR_REG =		BIT(13),
++	EIP93_INT_PE_RD_DONE_IRQ =	BIT(16),
++} EIP93_InterruptSource_t;
++
++typedef union {
++	struct {
++		unsigned int opCode		:3;
++		unsigned int direction		:1;
++		unsigned int opGroup		:2;
++		unsigned int padType		:2;
++		unsigned int cipher		:4;
++		unsigned int hash		:4;
++		unsigned int reserved2		:1;
++		unsigned int scPad		:1;
++		unsigned int extPad		:1;
++		unsigned int hdrProc		:1;
++		unsigned int digestLength	:4;
++		unsigned int ivSource		:2;
++		unsigned int hashSource		:2;
++		unsigned int saveIv		:1;
++		unsigned int saveHash		:1;
++		unsigned int reserved1		:2;
++	} bits;
++	unsigned int word;
++
++} saCmd0_t;
++
++typedef union {
++	struct {
++		unsigned int copyDigest		:1;
++		unsigned int copyHeader		:1;
++		unsigned int copyPayload	:1;
++		unsigned int copyPad		:1;
++		unsigned int reserved4		:4;
++		unsigned int cipherMode		:2;
++		unsigned int reserved3		:1;
++		unsigned int sslMac		:1;
++		unsigned int hmac		:1;
++		unsigned int byteOffset		:1;
++		unsigned int reserved2		:2;
++		unsigned int hashCryptOffset	:8;
++		unsigned int aesKeyLen		:3;
++		unsigned int reserved1		:1;
++		unsigned int aesDecKey		:1;
++		unsigned int seqNumCheck	:1;
++		unsigned int reserved0		:2;
++	} bits;
++	unsigned int word;
++
++} saCmd1_t;
++
++typedef struct saRecord_s {
++	saCmd0_t	saCmd0;
++	saCmd1_t	saCmd1;
++	unsigned int	saKey[8];
++	unsigned int	saIDigest[8];
++	unsigned int	saODigest[8];
++	unsigned int	saSpi;
++	unsigned int	saSeqNum[2];
++	unsigned int	saSeqNumMask[2];
++	unsigned int	saNonce;
++} saRecord_t;
++
++typedef struct saState_s {
++	unsigned int	stateIv[4];
++	unsigned int	stateByteCnt[2];
++	unsigned int	stateIDigest[8];
++} saState_t;
++
++typedef union {
++	struct {
++		unsigned int hostReady		:1;
++		unsigned int peReady		:1;
++		unsigned int reserved		:1;
++		unsigned int initArc4		:1;
++		unsigned int hashFinal		:1;
++		unsigned int haltMode		:1;
++		unsigned int prngMode		:2;
++		unsigned int padValue		:8;
++		unsigned int errStatus		:8;
++		unsigned int padCrtlStat	:8;
++	} bits;
++	unsigned int word;
++} peCrtlStat_t;
++
++typedef union {
++	struct {
++		unsigned int length		:20;
++		unsigned int reserved		:2;
++		unsigned int hostReady		:1;
++		unsigned int peReady		:1;
++		unsigned int byPass		:8;
++	} bits;
++	unsigned int word;
++} peLength_t;
++
++typedef struct eip93_descriptor_s {
++	peCrtlStat_t		peCrtlStat;
++	unsigned int		srcAddr;
++	unsigned int		dstAddr;
++	unsigned int		saAddr;
++	unsigned int		stateAddr;
++	unsigned int		arc4Addr;
++	unsigned int		userId;
++	peLength_t		peLength;
++} eip93_descriptor_t;
++
++#endif /* _COMMON_H_ */
+diff --git a/package/custom/mtk-eip93/src/eip93-core.c b/package/custom/mtk-eip93/src/eip93-core.c
+new file mode 100644
+index 0000000000..257c5ca4f9
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-core.c
+@@ -0,0 +1,566 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++//#define DEBUG 1
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/dmapool.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/spinlock.h>
++#include <linux/types.h>
++
++#include <crypto/internal/aead.h>
++#include <crypto/internal/skcipher.h>
++#include <crypto/internal/hash.h>
++
++#include "eip93-regs.h"
++#include "eip93-common.h"
++#include "eip93-core.h"
++#include "eip93-ring.h"
++#include "eip93-cipher.h"
++#include "eip93-prng.h"
++
++static struct mtk_alg_template *mtk_algs[] = {
++	&mtk_alg_ecb_des,
++	&mtk_alg_cbc_des,
++	&mtk_alg_ecb_des3_ede,
++	&mtk_alg_cbc_des3_ede,
++	&mtk_alg_ecb_aes,
++	&mtk_alg_cbc_aes,
++	&mtk_alg_ctr_aes,
++	&mtk_alg_rfc3686_aes,
++	&mtk_alg_authenc_hmac_md5_cbc_des,
++	&mtk_alg_authenc_hmac_sha1_cbc_des,
++	&mtk_alg_authenc_hmac_sha224_cbc_des,
++	&mtk_alg_authenc_hmac_sha256_cbc_des,
++	&mtk_alg_authenc_hmac_md5_cbc_des3_ede,
++	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
++	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
++	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
++	&mtk_alg_authenc_hmac_md5_cbc_aes,
++	&mtk_alg_authenc_hmac_sha1_cbc_aes,
++	&mtk_alg_authenc_hmac_sha224_cbc_aes,
++	&mtk_alg_authenc_hmac_sha256_cbc_aes,
++	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
++	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
++	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
++	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
++	&mtk_alg_authenc_hmac_md5_ecb_null,
++	&mtk_alg_authenc_hmac_sha1_ecb_null,
++	&mtk_alg_authenc_hmac_sha224_ecb_null,
++	&mtk_alg_authenc_hmac_sha256_ecb_null,
++	&mtk_alg_echainiv_authenc_hmac_md5_cbc_des,
++	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
++	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
++//	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
++//	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
++//	&mtk_alg_prng,
++//	&mtk_alg_cprng,
++};
++
++static void mtk_unregister_algs(struct mtk_device *mtk, int i)
++{
++	int j;
++
++	for (j = 0; j < i; j++) {
++		switch (mtk_algs[j]->type) {
++		case MTK_ALG_TYPE_SKCIPHER:
++			dev_dbg(mtk->dev, "unregistering: %s",
++				mtk_algs[j]->alg.skcipher.base.cra_name);
++			crypto_unregister_skcipher(&mtk_algs[j]->alg.skcipher);
++			break;
++		case MTK_ALG_TYPE_AEAD:
++			dev_dbg(mtk->dev, "unregistering: %s",
++				mtk_algs[j]->alg.aead.base.cra_name);
++			crypto_unregister_aead(&mtk_algs[j]->alg.aead);
++			break;
++		case MTK_ALG_TYPE_AHASH:
++			dev_dbg(mtk->dev, "unregistering: %s",
++				mtk_algs[j]->alg.ahash.halg.base.cra_name);
++			crypto_unregister_ahash(&mtk_algs[j]->alg.ahash);
++			break;
++		case MTK_ALG_TYPE_PRNG:
++			dev_dbg(mtk->dev, "unregistering: %s",
++				mtk_algs[j]->alg.rng.base.cra_name);
++			crypto_unregister_rng(&mtk_algs[j]->alg.rng);
++		}
++	}
++}
++
++static int mtk_register_algs(struct mtk_device *mtk)
++{
++	int i, ret = 0;
++
++	for (i = 0; i < ARRAY_SIZE(mtk_algs); i++) {
++		mtk_algs[i]->mtk = mtk;
++
++		switch (mtk_algs[i]->type) {
++		case MTK_ALG_TYPE_SKCIPHER:
++			dev_dbg(mtk->dev, "registering: %s",
++				mtk_algs[i]->alg.skcipher.base.cra_name);
++			ret = crypto_register_skcipher(&mtk_algs[i]->alg.skcipher);
++			break;
++		case MTK_ALG_TYPE_AEAD:
++			dev_dbg(mtk->dev, "registering: %s",
++				mtk_algs[i]->alg.aead.base.cra_name);
++			ret = crypto_register_aead(&mtk_algs[i]->alg.aead);
++			break;
++		case MTK_ALG_TYPE_AHASH:
++			dev_dbg(mtk->dev, "registering: %s",
++				mtk_algs[i]->alg.ahash.halg.base.cra_name);
++			ret = crypto_register_ahash(&mtk_algs[i]->alg.ahash);
++			break;
++		case MTK_ALG_TYPE_PRNG:
++			dev_dbg(mtk->dev, "registering: %s",
++				mtk_algs[i]->alg.rng.base.cra_name);
++			ret = crypto_register_rng(&mtk_algs[i]->alg.rng);
++		}
++		if (ret)
++			goto fail;
++	}
++
++	return 0;
++
++fail:
++	mtk_unregister_algs(mtk, i);
++
++	return ret;
++}
++
++static inline void mtk_irq_disable(struct mtk_device *mtk, u32 mask)
++{
++	__raw_writel(mask, mtk->base + EIP93_REG_MASK_DISABLE);
++	__raw_readl(mtk->base + EIP93_REG_MASK_DISABLE);
++}
++
++static inline void mtk_irq_enable(struct mtk_device *mtk, u32 mask)
++{
++	__raw_writel(mask, mtk->base + EIP93_REG_MASK_ENABLE);
++	__raw_readl(mtk->base + EIP93_REG_MASK_ENABLE);
++}
++
++static inline void mtk_irq_clear(struct mtk_device *mtk, u32 mask)
++{
++	__raw_writel(mask, mtk->base + EIP93_REG_INT_CLR);
++	__raw_readl(mtk->base + EIP93_REG_INT_CLR);
++}
++
++inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
++{
++	int DescriptorCountDone = MTK_RING_SIZE - 1;
++	int DescriptorDoneTimeout = 3;
++
++	DescriptorPendingCount = min_t(int, mtk->ring->requests, 32);
++
++	if (!DescriptorPendingCount)
++		return;
++
++	writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
++		(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
++		((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
++		mtk->base + EIP93_REG_PE_RING_THRESH);
++}
++
++static void mtk_handle_result_descriptor(struct mtk_device *mtk)
++{
++	struct crypto_async_request *async = NULL;
++	struct eip93_descriptor_s *rdesc;
++	int handled = 0, nreq;
++	int try, ret, err = 0;
++	volatile int done1, done2;
++	bool last_entry = false;
++	bool complete = false;
++	u32 flags;
++
++get_more:
++	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
++
++	while (nreq) {
++		rdesc = mtk_get_descriptor(mtk);
++		if (IS_ERR(rdesc)) {
++			dev_err(mtk->dev, "Ndesc: %d nreq: %d\n", handled, nreq);
++			ret = -EIO;
++			break;
++		}
++		/* make sure EIP93 finished writing all data
++		 * (volatile int) used since bits will be updated via DMA
++		*/
++		try = 0;
++		while (try < 1000) {
++			done1 = (volatile int)rdesc->peCrtlStat.bits.peReady;
++			done2 = (volatile int)rdesc->peLength.bits.peReady;
++			if ((!done1) || (!done2)) {
++					try++;
++					cpu_relax();
++					continue;
++			}
++			break;
++		}
++		/*
++		if (try)
++			dev_err(mtk->dev, "EIP93 try-count: %d", try);
++		*/
++		err = rdesc->peCrtlStat.bits.errStatus;
++		if (err) {
++			dev_err(mtk->dev, "Err: %02x\n", err);
++		}
++
++		handled++;
++
++		flags = rdesc->userId;
++		if (flags & MTK_DESC_FINISH)
++			complete = true;
++
++		if (flags & MTK_DESC_LAST) {
++			last_entry = true;
++			break;
++		}
++		nreq--;
++	}
++
++	if (last_entry) {
++		last_entry = false;
++		if (flags & MTK_DESC_PRNG)
++			mtk_prng_done(mtk, err);
++
++		if (flags & MTK_DESC_SKCIPHER) {
++			async = (struct crypto_async_request *)rdesc->arc4Addr;
++			mtk_skcipher_handle_result(mtk, async, complete, err);
++		}
++
++		if (flags & MTK_DESC_AEAD) {
++			async = (struct crypto_async_request *)rdesc->arc4Addr;
++			mtk_aead_handle_result(mtk, async, complete, err);
++		}
++
++	}
++
++	if (handled) {
++		writel(handled, mtk->base + EIP93_REG_PE_RD_COUNT);
++		spin_lock(&mtk->ring->lock);
++		mtk->ring->requests -= handled;
++		if (!mtk->ring->requests) {
++			mtk->ring->busy = false;
++			spin_unlock(&mtk->ring->lock);
++			goto queue_done;
++		}
++		spin_unlock(&mtk->ring->lock);
++		handled = 0;
++		goto get_more;
++	}
++
++	spin_lock(&mtk->ring->lock);
++	if (mtk->ring->requests)
++		mtk_push_request(mtk, mtk->ring->requests);
++	else
++		mtk->ring->busy = false;
++
++	spin_unlock(&mtk->ring->lock);
++queue_done:
++	mtk_irq_enable(mtk, BIT(1));
++}
++
++static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
++{
++	struct mtk_device *mtk = (struct mtk_device *)dev_id;
++	u32 irq_status;
++
++	irq_status = readl(mtk->base + EIP93_REG_INT_MASK_STAT);
++
++	if (irq_status & BIT(1)) {
++		mtk_irq_clear(mtk, BIT(1));
++		mtk_irq_disable(mtk, BIT(1));
++		tasklet_hi_schedule(&mtk->done);
++		return IRQ_HANDLED;
++	}
++
++/* TODO: error handler; for now just clear ALL */
++	dev_err(mtk->dev, "IRQ: %08x\n", irq_status);
++	mtk_irq_clear(mtk, irq_status);
++	if (irq_status) {
++		printk("disable irq\n");
++		mtk_irq_disable(mtk, irq_status);
++	}
++	return IRQ_NONE;
++}
++
++static void mtk_done_tasklet(unsigned long data)
++{
++	struct mtk_device *mtk = (struct mtk_device *)data;
++
++	mtk_handle_result_descriptor(mtk);
++}
++
++void mtk_initialize(struct mtk_device *mtk)
++{
++	uint8_t fRstPacketEngine = 1;
++	uint8_t fResetRing = 1;
++	uint8_t PE_Mode = 3;
++	uint8_t fBO_PD_en = 0;
++	uint8_t fBO_SA_en = 0;
++	uint8_t fBO_Data_en = 0;
++	uint8_t fBO_TD_en = 0;
++	uint8_t fEnablePDRUpdate = 1;
++	int InputThreshold = 128;
++	int OutputThreshold = 128;
++	int DescriptorCountDone = MTK_RING_SIZE - 1;
++	int DescriptorPendingCount = 1;
++	int DescriptorDoneTimeout = 3;
++	u32 regVal;
++
++	writel((fRstPacketEngine & 1) |
++		((fResetRing & 1) << 1) |
++		((PE_Mode & GENMASK(2, 0)) << 8) |
++		((fBO_PD_en & 1) << 16) |
++		((fBO_SA_en & 1) << 17) |
++		((fBO_Data_en  & 1) << 18) |
++		((fBO_TD_en & 1) << 20) |
++		((fEnablePDRUpdate & 1) << 10),
++		mtk->base + EIP93_REG_PE_CONFIG);
++
++	udelay(10);
++
++	fRstPacketEngine = 0;
++	fResetRing = 0;
++
++	writel((fRstPacketEngine & 1) |
++		((fResetRing & 1) << 1) |
++		((PE_Mode & GENMASK(2, 0)) << 8) |
++		((fBO_PD_en & 1) << 16) |
++		((fBO_SA_en & 1) << 17) |
++		((fBO_Data_en  & 1) << 18) |
++		((fBO_TD_en & 1) << 20) |
++		((fEnablePDRUpdate & 1) << 10),
++		mtk->base + EIP93_REG_PE_CONFIG);
++
++	/* Initialize the BYTE_ORDER_CFG register */
++	writel((EIP93_BYTE_ORDER_PD & GENMASK(4, 0)) |
++		((EIP93_BYTE_ORDER_SA & GENMASK(4, 0)) << 4) |
++		((EIP93_BYTE_ORDER_DATA & GENMASK(4, 0)) << 8) |
++		((EIP93_BYTE_ORDER_TD & GENMASK(2, 0)) << 16),
++		mtk->base + EIP93_REG_PE_ENDIAN_CONFIG);
++	/* Initialize the INT_CFG register */
++	writel((EIP93_INT_HOST_OUTPUT_TYPE & 1) |
++		((EIP93_INT_PULSE_CLEAR << 1) & 1),
++		mtk->base + EIP93_REG_INT_CFG);
++	/* Clock Control, must for DHM, optional for ARM
++	 * 0x1 Only enable Packet Engine Clock
++	 *     AES, DES and HASH clocks on demand
++	 * Activating all clocks per performance
++	 */
++	regVal = BIT(0) | BIT(1) | BIT(2) | BIT(4);
++	writel(regVal, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
++
++	writel(BIT(31) | (InputThreshold & GENMASK(10, 0)) |
++		((OutputThreshold & GENMASK(10, 0)) << 16),
++		mtk->base + EIP93_REG_PE_BUF_THRESH);
++
++	/* Clear/ack all interrupts before disable all */
++	mtk_irq_clear(mtk, 0xFFFFFFFF);
++	mtk_irq_disable(mtk, 0xFFFFFFFF);
++
++	writel((DescriptorCountDone & GENMASK(10, 0)) |
++		(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
++		((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
++		mtk->base + EIP93_REG_PE_RING_THRESH);
++
++	regVal = readl(mtk->base + EIP93_REG_PE_REVISION);
++	dev_dbg(mtk->dev, "Rev: %08x", regVal);
++	regVal = readl(mtk->base + EIP93_REG_PE_OPTION_1);
++	dev_dbg(mtk->dev, "Opt1: %08x", regVal);
++	regVal = readl(mtk->base + EIP93_REG_PE_OPTION_0);
++	dev_dbg(mtk->dev, "Opt0: %08x", regVal);
++
++}
++
++static void mtk_desc_free(struct mtk_device *mtk,
++				struct mtk_desc_ring *cdr,
++				struct mtk_desc_ring *rdr)
++{
++	writel(0, mtk->base + EIP93_REG_PE_RING_CONFIG);
++	writel(0, mtk->base + EIP93_REG_PE_CDR_BASE);
++	writel(0, mtk->base + EIP93_REG_PE_RDR_BASE);
++}
++
++static int mtk_desc_init(struct mtk_device *mtk,
++			struct mtk_desc_ring *cdr,
++			struct mtk_desc_ring *rdr)
++{
++	int RingOffset, RingSize;
++
++	cdr->offset = sizeof(struct eip93_descriptor_s);
++	cdr->base = dmam_alloc_coherent(mtk->dev, cdr->offset * MTK_RING_SIZE,
++					&cdr->base_dma, GFP_KERNEL);
++	if (!cdr->base)
++		return -ENOMEM;
++
++	cdr->write = cdr->base;
++	cdr->base_end = cdr->base + cdr->offset * (MTK_RING_SIZE - 1);
++	cdr->read  = cdr->base;
++
++	dev_dbg(mtk->dev, "CD Ring : %08X\n", cdr->base_dma);
++
++	rdr->offset = sizeof(struct eip93_descriptor_s);
++	rdr->base = dmam_alloc_coherent(mtk->dev, rdr->offset * MTK_RING_SIZE,
++					&rdr->base_dma, GFP_KERNEL);
++	if (!rdr->base)
++		return -ENOMEM;
++
++	rdr->write = rdr->base;
++	rdr->base_end = rdr->base + rdr->offset * (MTK_RING_SIZE - 1);
++	rdr->read  = rdr->base;
++
++	dev_dbg(mtk->dev, "RD Ring : %08X\n", rdr->base_dma);
++
++	writel((u32)cdr->base_dma, mtk->base + EIP93_REG_PE_CDR_BASE);
++	writel((u32)rdr->base_dma, mtk->base + EIP93_REG_PE_RDR_BASE);
++
++	RingOffset = 8; /* 8 words per descriptor */
++	RingSize = MTK_RING_SIZE - 1;
++
++	writel(((RingOffset & GENMASK(8, 0)) << 16) |
++		(RingSize & GENMASK(10, 0)),
++		mtk->base + EIP93_REG_PE_RING_CONFIG);
++
++	/* Create Sa and State record DMA pool */
++
++	mtk->saRecord_pool = dmam_pool_create("eip93-saRecord",
++				mtk->dev, sizeof(struct saRecord_s), 32, 0);
++
++	if (!mtk->saRecord_pool) {
++		dev_err(mtk->dev, "Unable to allocate saRecord DMA pool\n");
++		return -ENOMEM;
++	}
++
++	mtk->saState_pool = dmam_pool_create("eip93-saState",
++				mtk->dev, sizeof(struct saState_s), 32, 0);
++
++	if (!mtk->saState_pool) {
++		dev_err(mtk->dev, "Unable to allocate saState DMA pool\n");
++		return -ENOMEM;
++	}
++
++	return 0;
++}
++
++static int mtk_crypto_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct mtk_device *mtk;
++	struct resource *res;
++	int ret;
++
++	mtk = devm_kzalloc(dev, sizeof(*mtk), GFP_KERNEL);
++	if (!mtk)
++		return -ENOMEM;
++
++	mtk->dev = dev;
++	platform_set_drvdata(pdev, mtk);
++
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	mtk->base = devm_ioremap_resource(&pdev->dev, res);
++
++	if (IS_ERR(mtk->base))
++		return PTR_ERR(mtk->base);
++
++	mtk->irq = platform_get_irq(pdev, 0);
++
++	if (mtk->irq < 0) {
++		dev_err(mtk->dev, "Cannot get IRQ resource\n");
++		return mtk->irq;
++	}
++	dev_dbg(mtk->dev, "Assigning IRQ: %d", mtk->irq);
++
++	ret = devm_request_irq(mtk->dev, mtk->irq, mtk_irq_handler,
++				IRQF_TRIGGER_HIGH, dev_name(mtk->dev), mtk);
++
++	mtk->ring = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->ring), GFP_KERNEL);
++
++	if (!mtk->ring) {
++		dev_err(mtk->dev, "Can't allocate Ring memory\n");
++	}
++
++	ret = mtk_desc_init(mtk, &mtk->ring->cdr, &mtk->ring->rdr);
++
++	if (ret == -ENOMEM)
++		return -ENOMEM;
++
++	mtk->prng = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->prng), GFP_KERNEL);
++	if (!mtk->prng) {
++		dev_err(mtk->dev, "Can't allocate PRNG memory\n");
++		return -ENOMEM;
++	}
++
++	mtk->ring->requests = 0;
++	mtk->ring->busy = false;
++
++	spin_lock_init(&mtk->ring->lock);
++	spin_lock_init(&mtk->ring->read_lock);
++	spin_lock_init(&mtk->ring->write_lock);
++
++	/* Init tasklet for bottom half processing */
++	tasklet_init(&mtk->done, mtk_done_tasklet, (unsigned long)mtk);
++
++	mtk_initialize(mtk);
++	/* Init. finished, enable RDR interupt */
++	mtk_irq_enable(mtk, BIT(1));
++
++	ret = mtk_prng_init(mtk, true);
++	if (ret)
++		dev_info(mtk->dev, "PRNG initialized");
++	else
++		dev_err(mtk->dev, "Could not initialize PRNG");
++
++	ret = mtk_register_algs(mtk);
++
++	dev_info(mtk->dev, "EIP93 initialized succesfull\n");
++
++	return 0;
++}
++
++static int mtk_crypto_remove(struct platform_device *pdev)
++{
++	struct mtk_device *mtk = platform_get_drvdata(pdev);
++
++	mtk_unregister_algs(mtk, ARRAY_SIZE(mtk_algs));
++
++	/* Clear/ack all interrupts before disable all */
++	mtk_irq_clear(mtk, 0xFFFFFFFF);
++	mtk_irq_disable(mtk, 0xFFFFFFFF);
++
++	writel(0, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
++
++	tasklet_kill(&mtk->done);
++
++	mtk_desc_free(mtk, &mtk->ring->cdr, &mtk->ring->rdr);
++	dev_info(mtk->dev, "EIP93 removed.\n");
++
++	return 0;
++}
++
++static const struct of_device_id mtk_crypto_of_match[] = {
++	{ .compatible = "mediatek,mtk-eip93", },
++	{}
++};
++MODULE_DEVICE_TABLE(of, mtk_crypto_of_match);
++
++static struct platform_driver mtk_crypto_driver = {
++	.probe = mtk_crypto_probe,
++	.remove = mtk_crypto_remove,
++	.driver = {
++		.name = "mtk-eip93",
++		.of_match_table = mtk_crypto_of_match,
++	},
++};
++module_platform_driver(mtk_crypto_driver);
++
++MODULE_AUTHOR("Richard van Schagen <vschagen@cs.com>");
++MODULE_ALIAS("platform:" KBUILD_MODNAME);
++MODULE_DESCRIPTION("Mediatek EIP-93 crypto engine driver");
++MODULE_LICENSE("GPL v2");
+diff --git a/package/custom/mtk-eip93/src/eip93-core.h b/package/custom/mtk-eip93/src/eip93-core.h
+new file mode 100644
+index 0000000000..c391565910
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-core.h
+@@ -0,0 +1,91 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++#ifndef _CORE_H_
++#define _CORE_H_
++
++#include <linux/atomic.h>
++#include <linux/completion.h>
++#include <linux/dmapool.h>
++#include <crypto/aead.h>
++#include <crypto/internal/hash.h>
++#include <crypto/internal/rng.h>
++#include <crypto/internal/skcipher.h>
++
++/**
++ * struct mtk_device - crypto engine device structure
++ */
++struct mtk_device {
++	void __iomem		*base;
++	struct device		*dev;
++	struct clk		*clk;
++	int			irq;
++
++	struct tasklet_struct	dequeue;
++	struct tasklet_struct	done;
++
++	struct mtk_ring		*ring;
++
++	struct dma_pool		*saRecord_pool;
++	struct dma_pool		*saState_pool;
++
++	struct mtk_prng_device	*prng;
++};
++
++struct mtk_prng_device {
++	struct saRecord_s	*PRNGSaRecord;
++	dma_addr_t		PRNGSaRecord_dma;
++	void			*PRNGBuffer[2];
++	dma_addr_t		PRNGBuffer_dma[2];
++	uint32_t		cur_buf;
++	struct completion	Filled;
++	atomic_t		State;
++};
++
++struct mtk_desc_ring {
++	void			*base;
++	void			*base_end;
++	dma_addr_t		base_dma;
++	/* write and read pointers */
++	void			*read;
++	void			*write;
++	/* descriptor element offset */
++	u32			offset;
++};
++
++struct mtk_ring {
++	spinlock_t			lock;
++	/* command/result rings */
++	struct mtk_desc_ring		cdr;
++	struct mtk_desc_ring		rdr;
++	spinlock_t			write_lock;
++	spinlock_t			read_lock;
++	/* Number of request in the engine. */
++	int				requests;
++	/* The rings is handling at least one request */
++	bool				busy;
++};
++
++enum mtk_alg_type {
++	MTK_ALG_TYPE_SKCIPHER,
++	MTK_ALG_TYPE_AEAD,
++	MTK_ALG_TYPE_AHASH,
++	MTK_ALG_TYPE_PRNG,
++};
++
++struct mtk_alg_template {
++	struct mtk_device	*mtk;
++	enum mtk_alg_type	type;
++	unsigned long		flags;
++	union {
++		struct skcipher_alg	skcipher;
++		struct aead_alg		aead;
++		struct ahash_alg	ahash;
++		struct rng_alg		rng;
++	} alg;
++};
++
++#endif /* _CORE_H_ */
+diff --git a/package/custom/mtk-eip93/src/eip93-prng.c b/package/custom/mtk-eip93/src/eip93-prng.c
+new file mode 100644
+index 0000000000..9c02522f95
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-prng.c
+@@ -0,0 +1,360 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++
++#include "eip93-common.h"
++#include "eip93-core.h"
++#include "eip93-regs.h"
++#include "eip93-ring.h"
++#include "eip93-prng.h"
++
++static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
++{
++	struct mtk_prng_device *prng = mtk->prng;
++	struct eip93_descriptor_s cdesc;
++	int cur = prng->cur_buf;
++	int len, mode, err;
++
++	if (reset) {
++		len = 0;
++		mode = 1;
++	} else {
++		len = 4080;
++		mode = 2;
++	}
++
++	init_completion(&prng->Filled);
++	atomic_set(&prng->State, BUF_EMPTY);
++
++	memset(&cdesc, 0, sizeof(struct eip93_descriptor_s));
++	cdesc.peCrtlStat.bits.hostReady = 1;
++	cdesc.peCrtlStat.bits.prngMode = mode;
++	cdesc.peCrtlStat.bits.hashFinal = 0;
++	cdesc.peCrtlStat.bits.padCrtlStat = 0;
++	cdesc.peCrtlStat.bits.peReady = 0;
++	cdesc.srcAddr = 0;
++	cdesc.dstAddr = (u32)prng->PRNGBuffer_dma[cur];
++	cdesc.saAddr = (u32)prng->PRNGSaRecord_dma;
++	cdesc.stateAddr = 0;
++	cdesc.arc4Addr = 0;
++	cdesc.userId = MTK_DESC_PRNG | MTK_DESC_LAST | MTK_DESC_FINISH;
++	cdesc.peLength.bits.byPass = 0;
++	cdesc.peLength.bits.length = 4080;
++	cdesc.peLength.bits.hostReady = 1;
++
++	err = mtk_put_descriptor(mtk, cdesc);
++	if (err)
++		dev_err(mtk->dev, "PRNG: No Descriptor space");
++
++	/*   */
++	spin_lock(&mtk->ring->lock);
++	mtk->ring[0].requests += 1;
++	mtk->ring[0].busy = true;
++	spin_unlock(&mtk->ring->lock);
++
++	writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
++
++	wait_for_completion(&prng->Filled);
++
++	if (atomic_read(&prng->State) == PRNG_NEED_RESET)
++		return false;
++
++	return true;
++}
++
++/*----------------------------------------------------------------------------
++ * mtk_prng_init
++ *
++ * This function initializes the PE PRNG for the ARM mode.
++ *
++ * Return Value
++ *      true: PRNG is initialized
++ *     false: PRNG initialization failed
++ */
++bool mtk_prng_init(struct mtk_device *mtk, bool fLongSA)
++{
++	struct mtk_prng_device *prng = mtk->prng;
++	int i;
++	struct saRecord_s *saRecord;
++	const uint32_t PRNGKey[]  = {0xe0fc631d, 0xcbb9fb9a,
++					0x869285cb, 0xcbb9fb9a};
++	const uint32_t PRNGSeed[]  = {0x758bac03, 0xf20ab39e,
++					0xa569f104, 0x95dfaea6};
++	const uint32_t PRNGDateTime[] = {0, 0, 0, 0};
++
++	if (!mtk)
++		return -ENODEV;
++
++	prng->cur_buf = 0;
++	prng->PRNGBuffer[0] = devm_kzalloc(mtk->dev, 4080, GFP_KERNEL);
++	prng->PRNGBuffer_dma[0] = (u32)dma_map_single(mtk->dev,
++				(void *)prng->PRNGBuffer[0],
++				4080, DMA_FROM_DEVICE);
++
++	prng->PRNGBuffer[1] = devm_kzalloc(mtk->dev, 4080, GFP_KERNEL);
++	prng->PRNGBuffer_dma[1] = (u32)dma_map_single(mtk->dev,
++				(void *)prng->PRNGBuffer[1],
++				4080, DMA_FROM_DEVICE);
++
++	prng->PRNGSaRecord = dmam_alloc_coherent(mtk->dev,
++				sizeof(struct saRecord_s),
++				&prng->PRNGSaRecord_dma, GFP_KERNEL);
++
++	if (!prng->PRNGSaRecord) {
++		dev_err(mtk->dev, "PRNG dma_alloc for saRecord failed\n");
++		return -ENOMEM;
++	}
++
++	saRecord = &prng->PRNGSaRecord[0];
++
++	saRecord->saCmd0.word = 0x00001307;
++	saRecord->saCmd1.word = 0x02000000;
++
++	for (i = 0; i < 4; i++) {
++		saRecord->saKey[i] = PRNGKey[i];
++		saRecord->saIDigest[i] = PRNGSeed[i];
++		saRecord->saODigest[i] = PRNGDateTime[i];
++	}
++
++	return mtk_prng_push_job(mtk, true);
++}
++
++void mtk_prng_done(struct mtk_device *mtk, u32 err)
++{
++	struct mtk_prng_device *prng = mtk->prng;
++	int cur = prng->cur_buf;
++
++	if (err) {
++		dev_err(mtk->dev, "PRNG error: %d\n", err);
++		atomic_set(&prng->State, PRNG_NEED_RESET);
++	}
++
++	/* Buffer refilled, invalidate cache */
++	dma_unmap_single(mtk->dev, prng->PRNGBuffer_dma[cur],
++							4080, DMA_FROM_DEVICE);
++
++	complete(&prng->Filled);
++}
++
++static int get_prng_bytes(char *buf, size_t nbytes, struct mtk_prng_ctx *ctx,
++				int do_cont_test)
++{
++	int err;
++
++	spin_lock_bh(&ctx->prng_lock);
++
++	err = -EINVAL;
++	if (ctx->flags & PRNG_NEED_RESET)
++		goto done;
++
++done:
++	spin_unlock_bh(&ctx->prng_lock);
++	return err;
++}
++
++static int mtk_prng_generate(struct crypto_rng *tfm, const u8 *src,
++			   unsigned int slen, u8 *dst, unsigned int dlen)
++{
++	struct mtk_prng_ctx *prng = crypto_rng_ctx(tfm);
++
++	return get_prng_bytes(dst, dlen, prng, 1);
++}
++
++static int mtk_prng_seed(struct crypto_rng *tfm, const u8 *seed,
++		       unsigned int slen)
++{
++	struct rng_alg *alg = crypto_rng_alg(tfm);
++	struct mtk_alg_template *tmpl = container_of(alg,
++				struct mtk_alg_template, alg.rng);
++	struct mtk_device *mtk = tmpl->mtk;
++
++	return 0;
++}
++
++static bool mtk_prng_fill_buffer(struct mtk_device *mtk)
++{
++	struct mtk_prng_device *prng = mtk->prng;
++	int cur = prng->cur_buf;
++	int ret;
++
++	if (!mtk)
++		return -ENODEV;
++
++	/* add logic for 2 buffers and swap */
++	prng->PRNGBuffer_dma[cur] = (u32)dma_map_single(mtk->dev,
++					(void *)prng->PRNGBuffer[cur],
++					4080, DMA_FROM_DEVICE);
++
++	ret = mtk_prng_push_job(mtk, false);
++
++	return ret;
++}
++
++static int reset_prng_context(struct mtk_prng_ctx *ctx,
++				const unsigned char *key,
++				const unsigned char *V,
++				const unsigned char *DT)
++{
++	spin_lock_bh(&ctx->prng_lock);
++	ctx->flags |= PRNG_NEED_RESET;
++
++	if (key)
++		memcpy(ctx->PRNGKey, key, DEFAULT_PRNG_KSZ);
++	else
++		memcpy(ctx->PRNGKey, DEFAULT_PRNG_KEY, DEFAULT_PRNG_KSZ);
++
++
++	if (V)
++		memcpy(ctx->PRNGSeed, V, DEFAULT_BLK_SZ);
++	else
++		memcpy(ctx->PRNGSeed, DEFAULT_V_SEED, DEFAULT_BLK_SZ);
++
++	if (DT)
++		memcpy(ctx->PRNGDateTime, DT, DEFAULT_BLK_SZ);
++	else
++		memset(ctx->PRNGDateTime, 0, DEFAULT_BLK_SZ);
++
++	memset(ctx->rand_data, 0, DEFAULT_BLK_SZ);
++	memset(ctx->last_rand_data, 0, DEFAULT_BLK_SZ);
++
++	ctx->rand_data_valid = DEFAULT_BLK_SZ;
++
++	ctx->flags &= ~PRNG_NEED_RESET;
++	spin_unlock_bh(&ctx->prng_lock);
++	return 0;
++}
++
++/*
++ *  This is the cprng_registered reset method the seed value is
++ *  interpreted as the tuple { V KEY DT}
++ *  V and KEY are required during reset, and DT is optional, detected
++ *  as being present by testing the length of the seed
++ */
++static int cprng_reset(struct crypto_rng *tfm,
++		       const u8 *seed, unsigned int slen)
++{
++	struct mtk_prng_ctx *prng = crypto_rng_ctx(tfm);
++	const u8 *key = seed + DEFAULT_BLK_SZ;
++	const u8 *dt = NULL;
++
++	if (slen < DEFAULT_PRNG_KSZ + DEFAULT_BLK_SZ)
++		return -EINVAL;
++
++	if (slen >= (2 * DEFAULT_BLK_SZ + DEFAULT_PRNG_KSZ))
++		dt = key + DEFAULT_PRNG_KSZ;
++
++	reset_prng_context(prng, key, seed, dt);
++
++	if (prng->flags & PRNG_NEED_RESET)
++		return -EINVAL;
++	return 0;
++}
++
++
++static void free_prng_context(struct mtk_prng_ctx *ctx)
++{
++	crypto_free_cipher(ctx->tfm);
++}
++
++static int cprng_init(struct crypto_tfm *tfm)
++{
++	struct mtk_prng_ctx *ctx = crypto_tfm_ctx(tfm);
++
++	spin_lock_init(&ctx->prng_lock);
++
++	if (reset_prng_context(ctx, NULL, NULL, NULL) < 0)
++		return -EINVAL;
++
++	/*
++	 * after allocation, we should always force the user to reset
++	 * so they don't inadvertently use the insecure default values
++	 * without specifying them intentially
++	 */
++	ctx->flags |= PRNG_NEED_RESET;
++	return 0;
++}
++
++static void cprng_exit(struct crypto_tfm *tfm)
++{
++	free_prng_context(crypto_tfm_ctx(tfm));
++}
++
++struct mtk_alg_template mtk_alg_prng = {
++	.type = MTK_ALG_TYPE_PRNG,
++	.flags = 0,
++	.alg.rng = {
++		.generate = mtk_prng_generate,
++		.seed = mtk_prng_seed,
++		.seedsize = 0,
++		.base = {
++			.cra_name = "stdrng",
++			.cra_driver_name = "eip93-prng",
++			.cra_priority = 200,
++			.cra_ctxsize = sizeof(struct mtk_prng_ctx),
++			.cra_module = THIS_MODULE,
++			.cra_init = cprng_init,
++			.cra_exit = cprng_exit,
++		},
++	},
++};
++
++//#ifdef CONFIG_CRYPTO_FIPS
++static int fips_cprng_get_random(struct crypto_rng *tfm,
++				 const u8 *src, unsigned int slen,
++				 u8 *rdata, unsigned int dlen)
++{
++	struct mtk_prng_ctx *prng = crypto_rng_ctx(tfm);
++
++	return get_prng_bytes(rdata, dlen, prng, 1);
++}
++
++static int fips_cprng_reset(struct crypto_rng *tfm,
++			    const u8 *seed, unsigned int slen)
++{
++	struct mtk_prng_ctx *prng = crypto_rng_ctx(tfm);
++	u8 rdata[DEFAULT_BLK_SZ];
++	const u8 *key = seed + DEFAULT_BLK_SZ;
++	int rc;
++
++	if (slen < DEFAULT_PRNG_KSZ + DEFAULT_BLK_SZ)
++		return -EINVAL;
++
++	/* fips strictly requires seed != key */
++	if (!memcmp(seed, key, DEFAULT_PRNG_KSZ))
++		return -EINVAL;
++
++	rc = cprng_reset(tfm, seed, slen);
++
++	if (!rc)
++		goto out;
++
++	/* this primes our continuity test */
++	rc = get_prng_bytes(rdata, DEFAULT_BLK_SZ, prng, 0);
++	prng->rand_data_valid = DEFAULT_BLK_SZ;
++
++out:
++	return rc;
++}
++
++struct mtk_alg_template mtk_alg_cprng = {
++	.type = MTK_ALG_TYPE_PRNG,
++	.flags = 0,
++	.alg.rng = {
++		.generate = fips_cprng_get_random,
++		.seed = fips_cprng_reset,
++		.seedsize = DEFAULT_PRNG_KSZ + 2 * DEFAULT_BLK_SZ,
++		.base = {
++			.cra_name = "fips(ansi_cprng)",
++			.cra_driver_name = "eip93-fips_ansi_cprng",
++			.cra_priority = 300,
++			.cra_ctxsize = sizeof(struct mtk_prng_ctx),
++			.cra_module = THIS_MODULE,
++			.cra_init = cprng_init,
++			.cra_exit = cprng_exit,
++		},
++	},
++};
++//#endif
+diff --git a/package/custom/mtk-eip93/src/eip93-prng.h b/package/custom/mtk-eip93/src/eip93-prng.h
+new file mode 100644
+index 0000000000..944a0d3770
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-prng.h
+@@ -0,0 +1,34 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++#define DEFAULT_PRNG_KEY "0123456789abcdef"
++#define DEFAULT_PRNG_KSZ 16
++#define DEFAULT_BLK_SZ 16
++#define DEFAULT_V_SEED "zaybxcwdveuftgsh"
++
++#define BUF_NOT_EMPTY 0
++#define BUF_EMPTY 1
++#define BUF_PENDING 2
++#define PRNG_NEED_RESET 3
++
++extern struct mtk_alg_template mtk_alg_prng;
++extern struct mtk_alg_template mtk_alg_cprng;
++
++bool mtk_prng_init(struct mtk_device *mtk, bool fLongSA);
++
++void mtk_prng_done(struct mtk_device *mtk, u32 err);
++
++struct mtk_prng_ctx {
++	spinlock_t 		prng_lock;
++	unsigned char		rand_data[DEFAULT_BLK_SZ];
++	unsigned char		last_rand_data[DEFAULT_BLK_SZ];
++	uint32_t		PRNGKey[4];
++	uint32_t		PRNGSeed[4];
++	uint32_t		PRNGDateTime[4];
++	struct crypto_cipher	*tfm;
++	uint32_t		rand_data_valid;
++	uint32_t		flags;
++};
+diff --git a/package/custom/mtk-eip93/src/eip93-regs.h b/package/custom/mtk-eip93/src/eip93-regs.h
+new file mode 100644
+index 0000000000..28cccb106e
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-regs.h
+@@ -0,0 +1,190 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++#ifndef REG_EIP93_H
++#define REG_EIP93_H
++
++#define EIP93_REG_WIDTH			4
++/*-----------------------------------------------------------------------------
++ * Register Map
++ */
++#define DESP_BASE			0x0000000
++#define EIP93_REG_PE_CTRL_STAT		((DESP_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_SOURCE_ADDR	((DESP_BASE)+(0x01 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_DEST_ADDR		((DESP_BASE)+(0x02 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_SA_ADDR		((DESP_BASE)+(0x03 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_ADDR		((DESP_BASE)+(0x04 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_USER_ID		((DESP_BASE)+(0x06 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_LENGTH		((DESP_BASE)+(0x07 * EIP93_REG_WIDTH))
++
++//PACKET ENGINE RING configuartion registers
++#define PE_RNG_BASE			0x0000080
++
++#define EIP93_REG_PE_CDR_BASE		((PE_RNG_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_RDR_BASE		((PE_RNG_BASE)+(0x01 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_RING_CONFIG	((PE_RNG_BASE)+(0x02 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_RING_THRESH	((PE_RNG_BASE)+(0x03 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_CD_COUNT		((PE_RNG_BASE)+(0x04 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_RD_COUNT		((PE_RNG_BASE)+(0x05 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_RING_RW_PNTR	((PE_RNG_BASE)+(0x06 * EIP93_REG_WIDTH))
++
++//PACKET ENGINE  configuartion registers
++#define PE_CFG_BASE			0x0000100
++#define EIP93_REG_PE_CONFIG		((PE_CFG_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_STATUS		((PE_CFG_BASE)+(0x01 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_BUF_THRESH		((PE_CFG_BASE)+(0x03 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_INBUF_COUNT	((PE_CFG_BASE)+(0x04 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_OUTBUF_COUNT	((PE_CFG_BASE)+(0x05 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_BUF_RW_PNTR	((PE_CFG_BASE)+(0x06 * EIP93_REG_WIDTH))
++
++//PACKET ENGINE endian config
++#define EN_CFG_BASE			0x00001CC
++#define EIP93_REG_PE_ENDIAN_CONFIG	((EN_CFG_BASE)+(0x00 * EIP93_REG_WIDTH))
++
++//EIP93 CLOCK control registers
++#define CLOCK_BASE			0x01E8
++#define EIP93_REG_PE_CLOCK_CTRL		((CLOCK_BASE)+(0x00 * EIP93_REG_WIDTH))
++
++//EIP93 Device Option and Revision Register
++#define REV_BASE			0x01F4
++#define EIP93_REG_PE_OPTION_1		((REV_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_OPTION_0		((REV_BASE)+(0x01 * EIP93_REG_WIDTH))
++#define EIP93_REG_PE_REVISION		((REV_BASE)+(0x02 * EIP93_REG_WIDTH))
++
++//EIP93 Interrupt Control Register
++#define INT_BASE			0x0200
++#define EIP93_REG_INT_UNMASK_STAT	((INT_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_INT_MASK_STAT		((INT_BASE)+(0x01 * EIP93_REG_WIDTH))
++#define EIP93_REG_INT_CLR		((INT_BASE)+(0x01 * EIP93_REG_WIDTH))
++#define EIP93_REG_INT_MASK		((INT_BASE)+(0x02 * EIP93_REG_WIDTH))
++#define EIP93_REG_INT_CFG		((INT_BASE)+(0x03 * EIP93_REG_WIDTH))
++#define EIP93_REG_MASK_ENABLE		((INT_BASE)+(0X04 * EIP93_REG_WIDTH))
++#define EIP93_REG_MASK_DISABLE		((INT_BASE)+(0X05 * EIP93_REG_WIDTH))
++
++//EIP93 SA Record register
++#define SA_BASE				0x0400
++#define EIP93_REG_SA_CMD_0		((SA_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_SA_CMD_1		((SA_BASE)+(0x01 * EIP93_REG_WIDTH))
++
++//#define EIP93_REG_SA_READY		((SA_BASE)+(31 * EIP93_REG_WIDTH))
++
++//State save register
++#define STATE_BASE			0x0500
++#define EIP93_REG_STATE_IV_0		((STATE_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_STATE_IV_1		((STATE_BASE)+(0x01 * EIP93_REG_WIDTH))
++
++#define EIP93_PE_ARC4STATE_BASEADDR_REG	0x0700
++
++//RAM buffer start address
++#define EIP93_INPUT_BUFFER		0x0800
++#define EIP93_OUTPUT_BUFFER		0x0800
++
++//EIP93 PRNG Configuration Register
++#define PRNG_BASE			0x0300
++#define EIP93_REG_PRNG_STAT		((PRNG_BASE)+(0x00 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_CTRL		((PRNG_BASE)+(0x01 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_SEED_0		((PRNG_BASE)+(0x02 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_SEED_1		((PRNG_BASE)+(0x03 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_SEED_2		((PRNG_BASE)+(0x04 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_SEED_3		((PRNG_BASE)+(0x05 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_KEY_0		((PRNG_BASE)+(0x06 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_KEY_1		((PRNG_BASE)+(0x07 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_KEY_2		((PRNG_BASE)+(0x08 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_KEY_3		((PRNG_BASE)+(0x09 * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_RES_0		((PRNG_BASE)+(0x0A * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_RES_1		((PRNG_BASE)+(0x0B * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_RES_2		((PRNG_BASE)+(0x0C * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_RES_3		((PRNG_BASE)+(0x0D * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_LFSR_0		((PRNG_BASE)+(0x0E * EIP93_REG_WIDTH))
++#define EIP93_REG_PRNG_LFSR_1		((PRNG_BASE)+(0x0F * EIP93_REG_WIDTH))
++
++/*-----------------------------------------------------------------------------
++ * Constants & masks
++ */
++
++#define EIP93_SUPPORTED_INTERRUPTS_MASK	0xffff7f00
++#define EIP93_PRNG_DT_TEXT_LOWERHALF	0xDEAD
++#define EIP93_PRNG_DT_TEXT_UPPERHALF	0xC0DE
++#define EIP93_10BITS_MASK		0X3FF
++#define EIP93_12BITS_MASK		0XFFF
++#define EIP93_4BITS_MASK		0X04
++#define EIP93_20BITS_MASK		0xFFFFF
++
++#define EIP93_MIN_DESC_DONE_COUNT	0
++#define EIP93_MAX_DESC_DONE_COUNT	15
++
++#define EIP93_MIN_DESC_PENDING_COUNT	0
++#define EIP93_MAX_DESC_PENDING_COUNT	1023
++
++#define EIP93_MIN_TIMEOUT_COUNT		0
++#define EIP93_MAX_TIMEOUT_COUNT		15
++
++#define EIP93_MIN_PE_INPUT_THRESHOLD	1
++#define EIP93_MAX_PE_INPUT_THRESHOLD	511
++
++#define EIP93_MIN_PE_OUTPUT_THRESHOLD	1
++#define EIP93_MAX_PE_OUTPUT_THRESHOLD	432
++
++#define EIP93_MIN_PE_RING_SIZE		1
++#define EIP93_MAX_PE_RING_SIZE		1023
++
++#define EIP93_MIN_PE_DESCRIPTOR_SIZE	7
++#define EIP93_MAX_PE_DESCRIPTOR_SIZE	15
++
++//3DES keys,seed,known data and its result
++#define EIP93_KEY_0			0x133b3454
++#define EIP93_KEY_1			0x5e5b890b
++#define EIP93_KEY_2			0x5eb30757
++#define EIP93_KEY_3			0x93ab15f7
++#define EIP93_SEED_0			0x62c4bf5e
++#define EIP93_SEED_1			0x972667c8
++#define EIP93_SEED_2			0x6345bf67
++#define EIP93_SEED_3			0xcb3482bf
++#define EIP93_LFSR_0			0xDEADC0DE
++#define EIP93_LFSR_1			0xBEEFF00D
++
++/*-----------------------------------------------------------------------------
++ * EIP93 device initialization specifics
++ */
++
++/*----------------------------------------------------------------------------
++ * Byte Order Reversal Mechanisms Supported in EIP93
++ * EIP93_BO_REVERSE_HALF_WORD : reverse the byte order within a half-word
++ * EIP93_BO_REVERSE_WORD :  reverse the byte order within a word
++ * EIP93_BO_REVERSE_DUAL_WORD : reverse the byte order within a dual-word
++ * EIP93_BO_REVERSE_QUAD_WORD : reverse the byte order within a quad-word
++ */
++typedef enum
++{
++    EIP93_BO_REVERSE_HALF_WORD = 1,
++    EIP93_BO_REVERSE_WORD = 2,
++    EIP93_BO_REVERSE_DUAL_WORD = 4,
++    EIP93_BO_REVERSE_QUAD_WORD = 8,
++} EIP93_Byte_Order_Value_t;
++
++/*----------------------------------------------------------------------------
++ * Byte Order Reversal Mechanisms Supported in EIP93 for Target Data
++ * EIP93_BO_REVERSE_HALF_WORD : reverse the byte order within a half-word
++ * EIP93_BO_REVERSE_WORD :  reverse the byte order within a word
++ */
++typedef enum
++{
++    EIP93_BO_REVERSE_HALF_WORD_TD = 1,
++    EIP93_BO_REVERSE_WORD_TD = 2,
++} EIP93_Byte_Order_Value_TD_t;
++
++
++// BYTE_ORDER_CFG register values
++#define EIP93_BYTE_ORDER_PD		EIP93_BO_REVERSE_WORD
++#define EIP93_BYTE_ORDER_SA		EIP93_BO_REVERSE_WORD
++#define EIP93_BYTE_ORDER_DATA		EIP93_BO_REVERSE_WORD
++#define EIP93_BYTE_ORDER_TD		EIP93_BO_REVERSE_WORD_TD
++
++// INT_CFG register values
++#define EIP93_INT_HOST_OUTPUT_TYPE	0	// 0 = Level
++#define EIP93_INT_PULSE_CLEAR		0	// 0 = Manual clear
++
++#endif
+diff --git a/package/custom/mtk-eip93/src/eip93-ring.c b/package/custom/mtk-eip93/src/eip93-ring.c
+new file mode 100644
+index 0000000000..fff5c0b87b
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-ring.c
+@@ -0,0 +1,82 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++
++#include "eip93-common.h"
++#include "eip93-core.h"
++
++inline void *mtk_ring_next_wptr(struct mtk_device *mtk,
++						struct mtk_desc_ring *ring)
++{
++	void *ptr = ring->write;
++
++	if ((ring->write == ring->read - ring->offset) ||
++		(ring->read == ring->base && ring->write == ring->base_end))
++		return ERR_PTR(-ENOMEM);
++
++	if (ring->write == ring->base_end)
++		ring->write = ring->base;
++	else
++		ring->write += ring->offset;
++
++	return ptr;
++}
++
++inline void *mtk_ring_next_rptr(struct mtk_device *mtk,
++						struct mtk_desc_ring *ring)
++{
++	void *ptr = ring->read;
++
++	if (ring->write == ring->read)
++		return ERR_PTR(-ENOENT);
++
++	if (ring->read == ring->base_end)
++		ring->read = ring->base;
++	else
++		ring->read += ring->offset;
++
++	return ptr;
++}
++
++inline int mtk_put_descriptor(struct mtk_device *mtk,
++					struct eip93_descriptor_s desc)
++{
++	struct eip93_descriptor_s *cdesc;
++	struct eip93_descriptor_s *rdesc;
++
++	spin_lock(&mtk->ring->write_lock);
++	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring->cdr);
++
++	if (IS_ERR(cdesc))
++		return -ENOENT;
++
++	rdesc = mtk_ring_next_wptr(mtk, &mtk->ring->rdr);
++
++	if (IS_ERR(rdesc)) {
++		spin_lock(&mtk->ring->write_lock);
++		return -ENOENT;
++	}
++
++	memset(rdesc, 0, sizeof(struct eip93_descriptor_s));
++	memcpy(cdesc, &desc, sizeof(struct eip93_descriptor_s));
++
++	spin_unlock(&mtk->ring->write_lock);
++
++	return 0;
++}
++
++inline void *mtk_get_descriptor(struct mtk_device *mtk)
++{
++	struct eip93_descriptor_s *cdesc;
++
++	cdesc = mtk_ring_next_rptr(mtk, &mtk->ring->cdr);
++	if (IS_ERR(cdesc)) {
++		dev_err(mtk->dev, "Cant get Cdesc");
++		return cdesc;
++	}
++
++	return mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
++}
+diff --git a/package/custom/mtk-eip93/src/eip93-ring.h b/package/custom/mtk-eip93/src/eip93-ring.h
+new file mode 100644
+index 0000000000..c26d436e61
+--- /dev/null
++++ b/package/custom/mtk-eip93/src/eip93-ring.h
+@@ -0,0 +1,11 @@
++/* SPDX-License-Identifier: GPL-2.0
++ *
++ * Copyright (C) 2019 - 2020
++ *
++ * Richard van Schagen <vschagen@cs.com>
++ */
++
++inline int mtk_put_descriptor(struct mtk_device *mtk,
++					struct eip93_descriptor_s desc);
++
++inline void *mtk_get_descriptor(struct mtk_device *mtk);
+-- 
+GitLab
+

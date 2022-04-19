@@ -1,0 +1,48 @@
+From 51b39d94cb28f62649ac2fb5cfd8188c8516c57f Mon Sep 17 00:00:00 2001
+From: Mikhail Zhilkin <csharper2005@gmail.com>
+Date: Sun, 3 Oct 2021 19:07:45 +0000
+Subject: [PATCH] kernel: Add support for manual vermagic configuration
+
+Add support for manual vermagic configuration
+
+Signed-off-by: Mikhail Zhilkin <csharper2005@gmail.com>
+---
+ config/Config-kernel.in    | 6 ++++++
+ include/kernel-defaults.mk | 4 +++-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/config/Config-kernel.in b/config/Config-kernel.in
+index d4648a5064..0b0ecc7c67 100644
+--- a/config/Config-kernel.in
++++ b/config/Config-kernel.in
+@@ -37,6 +37,12 @@ config KERNEL_PROC_STRIPPED
+ 	bool "Strip non-essential /proc functionality to reduce code size"
+ 	default y if SMALL_FLASH
+ 
++config KERNEL_VERMAGIC
++	string "Specify vermagic for the build"
++	default ""
++	help
++	  Specify kernel vermagic. Leave it empty if you don't know what it is.
++
+ config KERNEL_DEBUG_FS
+ 	bool "Compile the kernel with debug filesystem enabled"
+ 	default y
+diff --git a/include/kernel-defaults.mk b/include/kernel-defaults.mk
+index 3aa1baa761..a1298ce956 100644
+--- a/include/kernel-defaults.mk
++++ b/include/kernel-defaults.mk
+@@ -106,7 +106,9 @@ define Kernel/Configure/Default
+ 		cp $(LINUX_DIR)/.config.set $(LINUX_DIR)/.config.prev; \
+ 	}
+ 	$(_SINGLE) [ -d $(LINUX_DIR)/user_headers ] || $(KERNEL_MAKE) INSTALL_HDR_PATH=$(LINUX_DIR)/user_headers headers_install
+-	grep '=[ym]' $(LINUX_DIR)/.config.set | LC_ALL=C sort | mkhash md5 > $(LINUX_DIR)/.vermagic
++	VERMAGIC=`grep CONFIG_KERNEL_VERMAGIC $(TOPDIR)/.config | awk -F= '{print $$$$2}' | sed -e 's/"\(.*\)"/\1/g'`; \
++	[ -n "$$$$VERMAGIC" ] && echo $$$$VERMAGIC > $(LINUX_DIR)/.vermagic || \
++	( $(SH_FUNC) grep '=[ym]' $(LINUX_DIR)/.config | LC_ALL=C sort | md5s > $(LINUX_DIR)/.vermagic )
+ endef
+ 
+ define Kernel/Configure/Initramfs
+-- 
+GitLab
+

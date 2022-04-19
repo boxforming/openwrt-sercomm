@@ -1,0 +1,440 @@
+From e7c02fadc9c7ab06f62845341c66063a1261c8fe Mon Sep 17 00:00:00 2001
+From: Mikhail Zhilkin <csharper2005@gmail.com>
+Date: Thu, 11 Nov 2021 15:27:21 +0000
+Subject: [PATCH] ramips: add support for Beeline SmartBox Flash
+
+Beeline SmartBox Flash is a wireless AC1300 (WiFi 5) router manufactured
+by Arcadyan company and distributed by Beeline ISP.
+https://forum.openwrt.org/t/add-support-for-beeline-smartbox-flash/110059
+
+Device specification
+--------------------
+SoC Type: MediaTek MT7621AT
+RAM: 256 MiB, Winbond W632GU6NB
+Flash: 128 MiB (NAND), Winbond W29N01HVSINF
+Wireless 2.4 GHz (MT7615DN): b/g/n, 2x2
+Wireless 5 GHz (MT7615DN): a/n/ac, 2x2
+Ethernet: 3xGbE (WAN, LAN1, LAN2)
+USB ports: 1xUSB3.0
+Button: 1 (Reset / WPS)
+LEDs: 1 RGB LED
+Power: 12 VDC, 1.5 A
+Connector type: Barrel
+Bootloader: U-Boot (Ralink UBoot Version: 5.0.0.2)
+OEM: Arcadyan WE42022
+
+Installation
+------------
+1. Place *kernel.bin and *rootfs.bin on any web server (192.168.1.2 in
+   this example)
+2. Connect to the router using telnet shell (no password required)
+3. Save MAC adresses to U-Boot environment:
+   uboot_env --set --name eth2macaddr --value $(ifconfig | grep eth2 | \
+    awk '{gsub(":",""); print $5}')
+   uboot_env --set --name eth3macaddr --value $(ifconfig | grep eth3 | \
+    awk '{gsub(":",""); print $5}')
+   uboot_env --set --name ra0macaddr --value $(ifconfig | grep ra0 | \
+    awk '{gsub(":",""); print $5}')
+   uboot_env --set --name rax0macaddr --value $(ifconfig | grep rax0 | \
+    awk '{gsub(":",""); print $5}')
+4. Ensure that MACs were saved correctly:
+   uboot_env --get --name eth2macaddr
+   uboot_env --get --name eth3macaddr
+   uboot_env --get --name ra0macaddr
+   uboot_env --get --name rax0macaddr
+5. Download and write the OpenWrt images on flash:
+   cd /tmp
+   wget http://192.168.1.2/kernel.bin
+   wget http://192.168.1.2/rootfs.bin
+   mtd_write erase /dev/mtd4
+   mtd_write write kernel.bin /dev/mtd4
+   mtd_write erase /dev/mtd12
+   mtd_write write rootfs.bin /dev/mtd12
+6. Set 1st boot partition and reboot:
+   uboot_env --set --name bootpartition --value 0
+   reboot
+
+Back to Stock
+-------------
+1. Run in the OpenWrt shell:
+   fw_setenv bootpartition 1
+   reboot
+2. Upgrade the stock firmware with any version to overwrite the OpenWrt in
+   Slot 1.
+
+MAC addresses
+-------------
++-----------+-------------------+----------------+
+| Interface | MAC               | Source         |
++-----------+-------------------+----------------+
+| label     | 30:XX:XX:51:XX:09 | No any MACs    |
+| LAN       | 30:XX:XX:51:XX:09 | was found on   |
+| WAN       | 30:XX:XX:51:XX:06 | Flash. [1]     |
+| WLAN_2g   | 30:XX:XX:51:XX:07 |                |
+| WLAN_5g   | 32:XX:XX:41:XX:07 |                |
++-----------+-------------------+----------------+
+[1] label hasn't been found neither in factory nor in other places.
+MAC addresses are stored in encrypted partition "glbcfg". Encryption key
+hasn't known yet. To ensure the correct MACs in OpenWrt, a hack with
+saving of the MACs to u-boot-env during the installation was applied.
+
+Signed-off-by: Mikhail Zhilkin <csharper2005@gmail.com>
+---
+ package/boot/uboot-envtools/files/ramips      |  23 +--
+ .../dts/mt7621_beeline_smartbox-flash.dts     | 158 ++++++++++++++++++
+ target/linux/ramips/image/mt7621.mk           |  76 +++++++++
+ .../mt7621/base-files/etc/board.d/02_network  |   7 +
+ .../etc/hotplug.d/ieee80211/10_fix_wifi_mac   |   6 +
+ .../mt7621/base-files/lib/upgrade/platform.sh |   1 +
+ 6 files changed, 260 insertions(+), 11 deletions(-)
+ create mode 100644 target/linux/ramips/dts/mt7621_beeline_smartbox-flash.dts
+
+diff --git a/package/boot/uboot-envtools/files/ramips b/package/boot/uboot-envtools/files/ramips
+index b21f976153..9990fc0368 100644
+--- a/package/boot/uboot-envtools/files/ramips
++++ b/package/boot/uboot-envtools/files/ramips
+@@ -30,6 +30,18 @@ ampedwireless,ally-00x19k|\
+ ampedwireless,ally-r1900k)
+ 	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x1000" "0x20000" "4"
+ 	;;
++beeline,smartbox-flash|\
++linksys,ea7300-v1|\
++linksys,ea7300-v2|\
++linksys,ea7500-v2|\
++linksys,ea8100-v1|\
++xiaomi,mi-router-3g|\
++xiaomi,mi-router-3-pro|\
++xiaomi,mi-router-4|\
++xiaomi,mi-router-ac2100|\
++xiaomi,redmi-router-ac2100)
++	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x1000" "0x20000"
++	;;
+ beeline,smartbox-giga|\
+ beeline,smartbox-turbo-plus)
+ 	ubootenv_add_uci_config "/dev/mtd0" "0x80000" "0x1000" "0x20000"
+@@ -55,17 +67,6 @@ ravpower,rp-wd03)
+ jcg,q20)
+ 	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x20000" "0x20000"
+ 	;;
+-linksys,ea7300-v1|\
+-linksys,ea7300-v2|\
+-linksys,ea7500-v2|\
+-linksys,ea8100-v1|\
+-xiaomi,mi-router-3g|\
+-xiaomi,mi-router-3-pro|\
+-xiaomi,mi-router-4|\
+-xiaomi,mi-router-ac2100|\
+-xiaomi,redmi-router-ac2100)
+-	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x1000" "0x20000"
+-	;;
+ zyxel,nr7101)
+ 	idx="$(find_mtd_index Config)"
+ 	[ -n "$idx" ] && \
+diff --git a/target/linux/ramips/dts/mt7621_beeline_smartbox-flash.dts b/target/linux/ramips/dts/mt7621_beeline_smartbox-flash.dts
+new file mode 100644
+index 0000000000..5825679375
+--- /dev/null
++++ b/target/linux/ramips/dts/mt7621_beeline_smartbox-flash.dts
+@@ -0,0 +1,158 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "mt7621.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	compatible = "beeline,smartbox-flash", "mediatek,mt7621-soc";
++	model = "Beeline SmartBox Flash";
++
++	aliases {
++		label-mac-device = &gmac0;
++
++		led-boot = &led_sys_red;
++		led-failsafe = &led_sys_red;
++		led-running = &led_sys_green;
++		led-upgrade = &led_sys_red;
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led_sys_green: sys_green {
++			label = "green:sys";
++			gpios = <&gpio 15 GPIO_ACTIVE_LOW>;
++		};
++
++		led_sys_red: sys_red {
++			label = "red:sys";
++			gpios = <&gpio 16 GPIO_ACTIVE_LOW>;
++		};
++
++		wan_blue {
++			label = "blue:wan";
++			gpios = <&gpio 14 GPIO_ACTIVE_LOW>;
++		};
++	};
++
++	keys {
++		compatible = "gpio-keys";
++
++		reset {
++			label = "reset";
++			gpios = <&gpio 3 GPIO_ACTIVE_LOW>;
++			linux,code = <KEY_RESTART>;
++		};
++	};
++};
++
++&nand {
++	status = "okay";
++
++	partitions {
++		compatible = "fixed-partitions";
++		#address-cells = <1>;
++		#size-cells = <1>;
++
++		partition@0 {
++			label = "u-boot";
++			reg = <0x0 0x100000>;
++			read-only;
++		};
++
++		partition@100000 {
++			label = "u-boot-env";
++			reg = <0x100000 0x100000>;
++		};
++
++		factory: partition@200000 {
++			label = "Factory";
++			reg = <0x200000 0x100000>;
++			read-only;
++		};
++
++		partition@300000 {
++			label = "kernel";
++			reg = <0x300000 0x2000000>;
++		};
++
++		partition@2300000 {
++			label = "Firmware2";
++			reg = <0x2300000 0x2000000>;
++			read-only;
++		};
++
++		partition@4300000 {
++			label = "glbcfg";
++			reg = <0x4300000 0x200000>;
++			read-only;
++		};
++
++		partition@4500000 {
++			label = "board_data";
++			reg = <0x4500000 0x100000>;
++			read-only;
++		};
++
++		partition@4600000 {
++			label = "glbcfg2";
++			reg = <0x4600000 0x200000>;
++			read-only;
++		};
++
++		partition@4800000 {
++			label = "board_data2";
++			reg = <0x4800000 0x100000>;
++			read-only;
++		};
++
++		partition@4900000 {
++			label = "ubi";
++			reg = <0x4900000 0x3680000>;
++		};
++	};
++};
++
++&pcie {
++	status = "okay";
++};
++
++&pcie0 {
++	wifi@0,0 {
++		compatible = "mediatek,mt76";
++		reg = <0x0000 0 0 0 0>;
++		mediatek,mtd-eeprom = <&factory 0x0>;
++	};
++};
++
++&gmac0 {
++	mtd-mac-address = <&factory 0xfff0>;
++};
++
++&switch0 {
++	ports {
++		port@2 {
++			status = "okay";
++			label = "lan2";
++		};
++
++		port@3 {
++			status = "okay";
++			label = "lan1";
++		};
++
++		port@4 {
++			status = "okay";
++			label = "wan";
++		};
++	};
++};
++
++&state_default {
++	gpio {
++		groups = "jtag", "uart2", "uartlite3", "wdt";
++		function = "gpio";
++	};
++};
+diff --git a/target/linux/ramips/image/mt7621.mk b/target/linux/ramips/image/mt7621.mk
+index 7a0f59de21..2972e0bad3 100644
+--- a/target/linux/ramips/image/mt7621.mk
++++ b/target/linux/ramips/image/mt7621.mk
+@@ -9,6 +9,82 @@ DEFAULT_SOC := mt7621
+ KERNEL_DTB += -d21
+ DEVICE_VARS += ELECOM_HWNAME LINKSYS_HWNAME
+ 
++define Build/beeline-sb-flash-header
++	echo -ne "$$(echo 000001001c0000000000420000000000 | sed \
++		's/../\\x&/g')" | dd of=$@.tmp bs=1 count=16 \
++		conv=notrunc status=none 2>/dev/null
++	dd if=$@ >> $@.tmp 2>/dev/null
++	mv $@.tmp $@
++	echo -n "hsqs" | dd of=$@ bs=1 seek=$$((0x41fff4)) count=4 \
++		conv=notrunc status=none 2>/dev/null
++	echo -ne "$$(echo 5d436f740070ff00 | sed 's/../\\x&/g')" | dd \
++		of=$@.tmp bs=1 count=8 conv=notrunc status=none \
++		2>/dev/null
++	echo -ne "$$(dd if=$@ bs=16740340 count=1 2>/dev/null | gzip -c \
++		| tail -c 8 | od -An -tx4 -N4 --endian=big | tr -d ' \n' \
++		| awk '{ printf "%8s\n", $$0 }' | tr '0123456789abcdef' \
++		'fedcba9876543210' | sed 's/../\\x&/g')" | dd of=$@.tmp \
++		bs=1 seek=8 count=4 conv=notrunc status=none 2>/dev/null
++	dd if=$@ >> $@.tmp 2>/dev/null
++	mv $@.tmp $@
++	echo -ne "$$(echo 0070ff00 | sed 's/../\\x&/g')" | dd of=$@ bs=1 \
++		seek=$$((0xff7004)) count=4 conv=notrunc status=none \
++		2>/dev/null
++	echo -n "HDR0" | dd of=$@ bs=1 seek=$$((0xff710c)) count=4 \
++		conv=notrunc status=none 2>/dev/null
++endef
++
++define Build/beeline-sbgiga-factory
++	$(eval kernel_tag=$(word 1,$(1)))
++	$(eval rootfs_tag=$(word 2,$(1)))
++	$(TOPDIR)/scripts/sercomm-partition-tag.py \
++		--input-file $@ \
++		--output-file $@.tmp \
++		--part-name $(rootfs_tag) \
++		--part-version $(SERCOMM_SWVER)
++	mv $@.tmp $@
++	dd if=$(IMAGE_KERNEL) >> $@.kernel 2>/dev/null
++	$(TOPDIR)/scripts/sercomm-partition-tag.py \
++		--input-file $@.kernel \
++		--output-file $@.kernel.tmp \
++		--part-name $(kernel_tag) \
++		--part-version $(SERCOMM_SWVER)
++	mv $@.kernel.tmp $@.kernel
++	dd if=$@ >> $@.kernel 2>/dev/null
++	mv $@.kernel $@
++	gzip -f -9n -c $@ > $@.gz
++	mv $@.gz $@
++	dd if=/dev/zero count=$$((0x70)) ibs=1 status=none | tr '\000' \
++		'0' | dd of=$@.pid conv=notrunc 2>/dev/null
++	dd if=/dev/zero count=$$((0x10)) ibs=1 status=none | tr '\000' \
++		'\0' | dd of=$@.pid bs=1 seek=$$((0x70)) conv=notrunc \
++		2>/dev/null
++	echo -n $(SERCOMM_HWVER)$(SERCOMM_HWID) | dd of=$@.pid bs=1 \
++		conv=notrunc 2>/dev/null
++	echo -n $(SERCOMM_SWVER) | dd of=$@.pid bs=1 seek=$$((0x64)) \
++		conv=notrunc 2>/dev/null
++	printf '\x0a' | dd of=$@.pid bs=1 seek=$$((0x70)) conv=notrunc \
++		2>/dev/null
++	$(TOPDIR)/scripts/sercomm-payload.py \
++		--input-file $@ \
++		--output-file $@.tmp \
++		--pid "$$(cat $@.pid | od -t x1 -An -v | tr -d '\n')"
++	mv $@.tmp $@
++	rm $@.pid
++	$(TOPDIR)/scripts/sercomm-crypto.py \
++		--input-file $@ \
++		--key-file $@.key \
++		--output-file $@.ser \
++		--version $(SERCOMM_SWVER)
++	$(STAGING_DIR_HOST)/bin/openssl enc -md md5 -aes-256-cbc \
++		-in $@ -out $@.enc \
++		-K `cat $@.key` \
++		-iv 00000000000000000000000000000000
++	dd if=$@.enc >> $@.ser 2>/dev/null
++	mv $@.ser $@
++	rm -f $@.enc $@.key
++endef
++
+ define Build/elecom-wrc-gs-factory
+ 	$(eval product=$(word 1,$(1)))
+ 	$(eval version=$(word 2,$(1)))
+diff --git a/target/linux/ramips/mt7621/base-files/etc/board.d/02_network b/target/linux/ramips/mt7621/base-files/etc/board.d/02_network
+index 4b44669b84..57d0eeca38 100755
+--- a/target/linux/ramips/mt7621/base-files/etc/board.d/02_network
++++ b/target/linux/ramips/mt7621/base-files/etc/board.d/02_network
+@@ -35,6 +35,8 @@ ramips_setup_interfaces()
+ 		ucidef_set_interfaces_lan_wan "lan" "wan"
+ 		;;
+ 	asiarf,ap7621-nv1|\
++	beeline,smartbox-flash|\
++	beeline,smartbox-giga|\
+ 	glinet,gl-mt1300|\
+ 	jcg,q20|\
+ 	lenovo,newifi-d1|\
+@@ -103,6 +105,11 @@ ramips_setup_macs()
+ 		wan_mac=$(mtd_get_mac_ascii u-boot-env et1macaddr)
+ 		label_mac=$(mtd_get_mac_binary factory 0x4)
+ 		;;
++	beeline,smartbox-flash)
++		lan_mac=$(mtd_get_mac_ascii u-boot-env eth2macaddr)
++		wan_mac=$(mtd_get_mac_ascii u-boot-env eth3macaddr)
++		label_mac=$(mtd_get_mac_ascii u-boot-env eth2macaddr)
++		;;
+ 	buffalo,wsr-1166dhp)
+ 		local index="$(find_mtd_index "board_data")"
+ 		wan_mac="$(grep -m1 mac= "/dev/mtd${index}" | cut -d= -f2)"
+diff --git a/target/linux/ramips/mt7621/base-files/etc/hotplug.d/ieee80211/10_fix_wifi_mac b/target/linux/ramips/mt7621/base-files/etc/hotplug.d/ieee80211/10_fix_wifi_mac
+index bd0f0254c6..bdedf721aa 100644
+--- a/target/linux/ramips/mt7621/base-files/etc/hotplug.d/ieee80211/10_fix_wifi_mac
++++ b/target/linux/ramips/mt7621/base-files/etc/hotplug.d/ieee80211/10_fix_wifi_mac
+@@ -10,6 +10,12 @@ PHYNBR=${DEVPATH##*/phy}
+ board=$(board_name)
+ 
+ case "$board" in
++	beeline,smartbox-flash)
++		hw_mac_addr_ra0="$(mtd_get_mac_ascii u-boot-env ra0macaddr)"
++		hw_mac_addr_rax0="$(mtd_get_mac_ascii u-boot-env rax0macaddr)"
++		[ "$PHYNBR" = "0" ] && echo -n $hw_mac_addr_ra0 > /sys${DEVPATH}/macaddress
++		[ "$PHYNBR" = "1" ] && echo -n $hw_mac_addr_rax0 > /sys${DEVPATH}/macaddress
++		;;
+ 	glinet,gl-mt1300)
+ 		[ "$PHYNBR" = "1" ] && \
+ 			macaddr_add "$(mtd_get_mac_binary factory 0x4)" 1 > /sys${DEVPATH}/macaddress
+diff --git a/target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh b/target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh
+index 0af22ea585..9c17a36af9 100755
+--- a/target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh
++++ b/target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh
+@@ -53,6 +53,7 @@ platform_do_upgrade() {
+ 	ampedwireless,ally-r1900k|\
+ 	asus,rt-ac65p|\
+ 	asus,rt-ac85p|\
++	beeline,smartbox-flash|\
+ 	beeline,smartbox-giga|\
+ 	beeline,smartbox-turbo-plus|\
+ 	dlink,dir-1960-a1|\
+-- 
+GitLab
+
