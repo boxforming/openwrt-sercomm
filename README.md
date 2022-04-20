@@ -72,13 +72,49 @@ Then replace 1 with 2, 3, ...9
 
 Check if all files are transferred, from 0 to 9
 
+
+upload using tftp?
+
+https://forum.openwrt.org/t/add-support-for-beeline-smartbox-turbo/99635/42
+
 </details>
 
-SD1811FF1352
+### Factory info, changing partition to load from
+
+_Stock bootloader_
+
+serial number/SuperUser password
+
+`hexdump -e '/2 "%1s"' -n 12 -s 135184 /dev/mtd2`
+
+current partition to load
+
+check
+
+`hexdump -e '/2 "%1s"' -n 8 -s 0 /dev/mtd3`
+
+dump
+
+`nanddump -f /tmp/mtd3 /dev/mtd3`
 
 
-CSN=$(hexdump -e '/2 "%1s"' -n 12 -s 135184 /dev/mtd2)
+modify
 
+`echo -n '1' | dd of=/tmp/mtd3 bs=1 seek=7 count=1 conv=notrunc`
+
+write back
+
+`dd if=/tmp/mtd3 of=/dev/mtdblock3`
+
+check if openwrt on second partition
+
+`hexdump -e '/2 "%1s"' -n 26 -s 288 /dev/mtd5`
+
+MIPS OpenWrt Linux-5.4.188
+
+`hexdump -e '/2 "%1s"' -n 18 -s 288 /dev/mtd4`
+
+Linux Kernel Image
 
 ## Scripts
 
@@ -114,29 +150,32 @@ You can browse more commands: [russian](https://4pda.to/forum/index.php?showtopi
 
 </details>
 
-After dumping all important data you can try [ru: emergency recovery](https://4pda.to/forum/index.php?showtopic=943587&st=6160#entry109251225) from recovery image
+If you have router with loading issues like mine, you can try [ru: emergency recovery](https://4pda.to/forum/index.php?showtopic=943587&st=6160#entry109251225) from recovery image.
 
-Create full binary
+Create full binary with OOB data:
 
-`cat mtd0 ... mtd9 > full.bin`
+```
+cat mtd{0..9} > full.bin
+bbe -b ":512" -e "A 0000000000000000" full.bin -o full-oob.bin
+```
 
-Add OOB data:
-
-`bbe -b ":512" -e "A 0000000000000000" full.bin -o full-oob.bin`
+run `sercomm-recovery`
 
 Recovery image Uboot at 0x1C560
 
-#S1500NBN Создание Аварийного образа c OpenWRT
-Как вчера и говорил @Kuzja получилось зашить OpenWRT таким методом:
-Из предыдущих сообщений по OpenWRT и NBN взять образы *-kernel.img & *-rootfs.img 
-Далее создать пустые файлы разделов mtd5 и mtd7 размера 4 MiB & 46 MiB соответственно:
-fallocate -l 4MB mtd5.Kernel.OpenWRT.bin аналогично для rootfs.
-Далее записать поверх
-dd if=openwrt-21.02.2-ramips-mt7621-wifire_s1500-nbn-squashfs-kernel.bin of=mtd5.Kernel.OpenWRT.bin conv=notrunc аналогично для rootfs.
-Далее как и в предыдущем сообщении объединяем через cat все разделы только с заменой mtd5 и mtd7 с OpenWRT.
-Восстанавливаем через Аварийный режим образ, получаем OpenWRT на NBN.
+Also you can replace some partitions with OpenWRT ones:
 
-Благодарим сердечно за испытания @Kuzja
+```
+fallocate -l 6MB mtd5.Kernel.OpenWRT.bin
+dd if=openwrt-…-squashfs-kernel.bin of=mtd5.Kernel.OpenWRT.bin conv=notrunc
+```
+
+then
+
+```
+fallocate -l 32MB mtd7.RootFS.OpenWRT.bin
+dd …
+```
 
 ### http server
 
@@ -163,6 +202,7 @@ flash write 0x100000 0x80001000 1048576
             ^ start  ^ memory   ^ size
 ```
 
+TODO: generate start and size based on partition sizes
 
 flash erase 0x100000 0x6e00000
 
@@ -195,10 +235,21 @@ flash write 0x6400000 0x80001000 0x1b80000
 
 boot flash 0x400100
 
+OR
+
+go to http://192.168.1.1/envedit.html
+
+autoboot.command 0x400100
+kernel0 0x400100
+kernel1 0xa00100
+
+
 **CHECK IF EVERYTHING ALLRIGHT**
 
 Ethernet ports will not be available, connect using WiFi
 and check if web interface available on http://192.168.1.1
+
+Now you can replace Breed with stock
 
 ```
 wget http://192.168.1.2:5000/mtd0      
@@ -206,13 +257,25 @@ flash erase 0x0 0x100000
 flash write 0x0 0x80001000 1048576
 ```
 
-http://192.168.1.1/envedit.html
-
-autoboot.command 0x400100
-kernel0 0x400100
-kernel1 0xa00100
 
 </details>
 
+## OpenWRT build
 
-sed -i '/^(CONFIG_REPRODUCIBLE_DEBUG_INFO|CONFIG_COLLECT_KERNEL_DEBUG|CONFIG_SDK|CONFIG_ALL_KMODS)=y/d' .config
+docker run openwrtorg/sdk:ramips-mt7621-21.02.3
+
+run `build.sh`
+
+Beeline Smartbox Turbo+ should be upgraded to firmware version 2.0.x,
+on bootloader from 1.0.x freshly built OpenWRT will not pass CRC validation
+for kernel. But on 2.0.x you should remove all dots from file name,
+only allowed dot is before file's `img` extension.
+
+You can build proper signature for both versions,
+https://gitlab.com/openwrt-dev-ru-smartbox/openwrt-mt7621-sercomm-smartbox/-/commit/d9d602b26cf703df128207ddbf10215decff9235
+but code author told me code have issues with parallel build
+https://gitlab.com/openwrt-dev-ru-smartbox/openwrt-mt7621-sercomm-smartbox/-/blob/sercomm_s3x/target/linux/ramips/image/mt7621.mk#L106
+
+TODO: to be continued…
+
+Popular chinese config: https://4pda.to/forum/index.php?showtopic=943587&st=8380#entry113893377

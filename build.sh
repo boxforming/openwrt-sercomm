@@ -18,7 +18,7 @@ make distclean
 OPENWRT_DOWNLOADS_URL="https://downloads.openwrt.org/releases/${RELEASE}/targets/${ARCH}/${SOC}"
 RELEASE_KMODS_URL="${OPENWRT_DOWNLOADS_URL}/kmods/"
 
-FORCE_VERMAGIC=0e0aa31d4e07a93312bc0c08127b3950
+FORCE_VERMAGIC=
 if [ -z "$FORCE_VERMAGIC" ] ; then
         echo Downloading vermagic
         VERMAGIC_LINE=$(curl $RELEASE_KMODS_URL | grep '<tr>' | grep -v 'Date')
@@ -31,9 +31,8 @@ fi
 
 BUILDINFO_URL="${OPENWRT_DOWNLOADS_URL}/config.buildinfo"
 
-# curl https://downloads.openwrt.org/releases/21.02.2/targets/ramips/mt7621/config.buildinfo | egrep -v '^(CONFIG_REPRODUCIBLE_DEBUG_INFO|CONFIG_COLLECT_KERNEL_DEBUG|CONFIG_SDK|CONFIG_ALL_KMODS)'
-
 curl "$BUILDINFO_URL" | egrep -v '^CONFIG_(REPRODUCIBLE_DEBUG_INFO|COLLECT_KERNEL_DEBUG|SDK|ALL_KMODS|BUILDBOT|IB)' > .config
 
 echo "CONFIG_KERNEL_VERMAGIC=$VERMAGIC" >> .config
 
+# for i in ../openwrt-sercomm/patches/*.patch; do patch -p1 < $i; done
