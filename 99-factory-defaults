@@ -1,0 +1,101 @@
+#!/bin/sh
+
+# https://www.mail-archive.com/openwrt-devel@lists.openwrt.org/msg49377.html
+# https://gist.github.com/apla/a81cad0a1dc9fedfeff19941116da369
+# https://openwrt.org/docs/guide-developer/uci-defaults
+# copy to target/linux/ramips/mt7621/base-files/etc/uci-defaults/99-factory-defaults
+
+. /lib/functions.sh
+. /lib/functions/system.sh
+
+get_board_name () {
+	cat /proc/device-tree/compatible | tr -s '\000' '\n' | head -n 1
+}
+
+mtd_get_cstring () {
+	local mtdname="$1"
+	local offset=$(($2))
+	local part
+	local mac_dirty
+	
+	part=$(find_mtd_part "$mtdname")
+
+	if [ -z "$part" ]; then
+		echo "mtd_get_cstring: partition $mtdname not found!" >&2
+		return
+	fi
+
+	if [ -z "$offset" ]; then
+		echo "mtd_get_cstring: offset missing" >&2
+		return
+	fi
+
+	cstring=$(dd if="$part" skip="$offset" count=1 bs=32b iflag=skip_bytes 2>/dev/null | tr -s '\000' '\n' | head -n1)
+
+	echo $cstring
+}
+
+set_factory_root_password () {
+	factory_root_password=$1
+	root_shadow=$(cat /etc/shadow | grep '^root' | cut -d ':' -f 2)
+	if [ "x$root_shadow" == "x" -a "x$factory_root_password" != "x" ] ; then
+		echo -e "$factory_root_password\n$factory_root_password" | passwd root
+	fi
+}
+
+apply_factory_defaults () {
+	local board=$(get_board_name)
+
+	case $board in
+	beeline,smartbox-turbo-plus)
+		
+		wlan_ssid=$(mtd_get_cstring factory 0x21080)
+		if [ "$wlan_ssid" != "${wlan_ssid#Beeline}" ] ; then
+			wlan_key=$(mtd_get_cstring factory 0x210a0)
+			wlan_country="RU"
+			wlan_enc="sae-mixed" # psk2
+
+			wlan_5ghz_ssid="${wlan_ssid:0:8}5${wlan_ssid:9}"
+
+			serial_number=$(mtd_get_cstring factory 0x21010)
+			root_password="$serial_number"
+		else
+			wlan_ssid=
+		fi
+		;;
+	esac
+
+	if [ ! -z "$wlan_ssid" ] ; then
+		uci -q batch << EOI
+set wireless.@wifi-device[0].disabled='0'
+set wireless.@wifi-device[0].country='${wlan_country}'
+
+set wireless.@wifi-iface[0].ssid='${wlan_ssid}'
+set wireless.@wifi-iface[0].encryption='${wlan_enc}'
+set wireless.@wifi-iface[0].key='${wlan_key}'
+set wireless.@wifi-iface[0].network='lan'
+
+set wireless.@wifi-device[1].disabled='0'
+set wireless.@wifi-device[1].country='${wlan_country}'
+
+set wireless.@wifi-iface[1].ssid='${wlan_5ghz_ssid}'
+set wireless.@wifi-iface[1].encryption='${wlan_enc}'
+set wireless.@wifi-iface[1].key='${wlan_key}'
+set wireless.@wifi-iface[1].network='lan'
+
+commit wireless
+EOI
+	fi
+
+	if [ ! -z "$root_password" ] ; then
+		set_factory_root_password "$root_password"
+	fi
+}
+
+wifi config
+
+apply_factory_defaults
+
+wifi
+
+exit 0
